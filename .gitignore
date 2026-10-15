@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# 班级事务的个人材料（入党谈话等）——仓库公开，不入版本控制
+/材料/
+
