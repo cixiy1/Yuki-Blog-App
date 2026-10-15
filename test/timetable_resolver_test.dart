@@ -388,13 +388,14 @@ void main() {
       expect(w7.entries.where((e) => e.selfStudy && e.day == 1), isEmpty);
     });
 
-    test('周三 9-10 排晚自习 强能楼812（与非本周的 c10 堆叠）', () {
+    test('周三 9-10 只显示晚自习 强能楼812（非本周的 c10 让位）', () {
       final cells = w7.entriesAt(3, '9-10');
-      final study = cells.where((e) => e.selfStudy).toList();
-      expect(study.length, 1);
-      expect(study.single.room, '强能楼812');
-      // c10 仅第 4 周，本周显示为非本周灰格
-      expect(cells.where((e) => e.key == 'c10').single.status, CellStatus.off);
+      expect(cells.length, 1);
+      expect(cells.single.selfStudy, isTrue);
+      expect(cells.single.room, '强能楼812');
+      // c10 仅第 4 周：本周仍是「非本周」，但不与晚自习同格显示
+      expect(w7.entries.firstWhere((e) => e.key == 'c10').status, CellStatus.off);
+      expect(cells.where((e) => e.key == 'c10'), isEmpty);
     });
 
     test('周五不排晚自习', () {
@@ -442,6 +443,14 @@ void main() {
         greaterThan(5),
       );
     });
+
+    test('格子没有别的条目时，「非本周」灰格照常显示', () {
+      final w5 = resolver.resolve(5);
+      final cells = w5.entriesAt(3, '9-10');
+      expect(cells.length, 1);
+      expect(cells.single.key, 'c10');
+      expect(cells.single.status, CellStatus.off);
+    });
   });
 
   group('第 4 周', () {
@@ -457,6 +466,10 @@ void main() {
       final c10 = w4.entries.firstWhere((e) => e.key == 'c10');
       expect(c10.status, CellStatus.on);
       expect(c10.room, '强能楼505');
+      // 当晚有正课 ⇒ 不排晚自习，该格只有 Java 一条
+      final cells = w4.entriesAt(3, '9-10');
+      expect(cells.length, 1);
+      expect(cells.single.key, 'c10');
     });
 
     test('自定义时段排序：15:45 在 5-6 与 7-8 之间，16:40/21:00 依次靠后', () {
@@ -480,6 +493,16 @@ void main() {
       expect(c12.slot, '7-8');
       expect(c12.flag, '调课');
       expect(w6.entriesAt(3, '7-8').single.short, '返校');
+    });
+
+    test('临时新增顶掉同格的「非本周」灰卡（周三 5-6 / 9-10 只显示返校）', () {
+      final w6 = resolver.resolve(6);
+      for (final slot in ['5-6', '9-10']) {
+        final cells = w6.entriesAt(3, slot);
+        expect(cells.length, 1, reason: '周三 $slot 应只有一条');
+        expect(cells.single.short, '返校');
+        expect(cells.single.status, CellStatus.add);
+      }
     });
   });
 
