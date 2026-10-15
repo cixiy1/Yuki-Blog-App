@@ -67,7 +67,7 @@ void main() {
       maxScrolls: 20,
     );
     expect(find.text('数据更新历'), findsOneWidget);
-    expect(find.text('最近更新于 2026-10-15'), findsOneWidget);
+    expect(find.textContaining('最近更新于'), findsWidgets);
     expect(find.textContaining('团支书'), findsWidgets); // 更新历 + 通知区
   });
 

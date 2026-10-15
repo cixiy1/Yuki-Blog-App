@@ -22,11 +22,12 @@ void main() {
       expect(resolver.currentWeek(DateTime(2026, 10, 15)), 7);
     });
 
-    test('meta.changelog 解析：8 条、最新在前', () {
-      expect(data.meta.changelog.length, 8);
-      expect(data.meta.changelog.first.date, '2026-10-15');
-      expect(data.meta.changelog.first.content, contains('团支书'));
-      expect(data.meta.updated, '2026-10-15');
+    test('meta.changelog 解析：git 历史自动生成、最新在前', () {
+      // 条目由 gen_changelog.py 从 git 提交历史生成，会持续增长
+      expect(data.meta.changelog.length, greaterThan(8));
+      expect(data.meta.changelog.first.date, startsWith('2026-10-15'));
+      expect(data.meta.changelog.first.content, isNotEmpty);
+      expect(data.meta.updated, startsWith('2026-10-15'));
     });
 
     test('第 1 周周一 = 2026-08-31', () {
