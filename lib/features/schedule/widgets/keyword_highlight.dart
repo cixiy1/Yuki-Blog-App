@@ -10,12 +10,14 @@ const Map<String, KwCategory> kwMap = {
   '团支书': KwCategory.role,
   '班长': KwCategory.role,
   '辅导员': KwCategory.role,
+  '班主任': KwCategory.role,
   '班委': KwCategory.role,
   '团委': KwCategory.role,
   '学生会': KwCategory.role,
   '党支部': KwCategory.role,
   '党员': KwCategory.role,
   '预备党员': KwCategory.role,
+  '负责人': KwCategory.role,
   // 楼宇 / 地点
   '修德楼': KwCategory.bld,
   '强能楼': KwCategory.bld,
@@ -28,8 +30,11 @@ const Map<String, KwCategory> kwMap = {
   '实验楼': KwCategory.bld,
   '报告厅': KwCategory.bld,
   '体育馆': KwCategory.bld,
+  '田径场': KwCategory.bld,
+  '看台': KwCategory.bld,
   '操场': KwCategory.bld,
   '食堂': KwCategory.bld,
+  '北校区': KwCategory.bld,
   // 科目
   '习概': KwCategory.subj,
   'Web': KwCategory.subj,
@@ -47,6 +52,8 @@ const Map<String, KwCategory> kwMap = {
   '晚自习': KwCategory.evt,
   '早自习': KwCategory.evt,
   '体测': KwCategory.evt,
+  '体质健康测试': KwCategory.evt,
+  '免测': KwCategory.evt,
   '入党谈话': KwCategory.evt,
   '入党积极分子': KwCategory.evt,
   '入党': KwCategory.evt,
@@ -54,11 +61,14 @@ const Map<String, KwCategory> kwMap = {
   '团籍资料': KwCategory.evt,
   '班委竞选': KwCategory.evt,
   '反诈': KwCategory.evt,
+  '军训服装': KwCategory.evt,
   '军训': KwCategory.evt,
   '劳动实践': KwCategory.evt,
   '考试': KwCategory.evt,
   '讲座': KwCategory.evt,
   '抽查': KwCategory.evt,
+  '考勤': KwCategory.evt,
+  '点名': KwCategory.evt,
   '返校': KwCategory.evt,
   '放假': KwCategory.evt,
   '调休': KwCategory.evt,
@@ -95,6 +105,17 @@ const Map<String, KwCategory> kwMap = {
   '上报': KwCategory.act,
   '领取': KwCategory.act,
   '填写': KwCategory.act,
+  '请假': KwCategory.act,
+  '办理': KwCategory.act,
+  '购买': KwCategory.act,
+  '携带': KwCategory.act,
+  '参加': KwCategory.act,
+  '报名': KwCategory.act,
+  '核对': KwCategory.act,
+  '申请': KwCategory.act,
+  '履行': KwCategory.act,
+  '到场': KwCategory.act,
+  '完成': KwCategory.act,
   // 负面动作
   '取消': KwCategory.neg,
   '停课': KwCategory.neg,
@@ -104,6 +125,7 @@ const Map<String, KwCategory> kwMap = {
   '延期': KwCategory.neg,
   '作废': KwCategory.neg,
   '中止': KwCategory.neg,
+  '旷课': KwCategory.neg,
 };
 
 /// 高亮正则：长词优先，避免「劳动实践」被「劳动」类短词截断。
@@ -193,6 +215,234 @@ List<({int start, int end})> sentenceRanges(String content) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// 语义重点度：读懂一句话再判断它值不值得看
+// ---------------------------------------------------------------------------
+//
+// 词表只能识别「这是楼宇」「这是科目」，回答不了「这条信息要不要我现在处理」。
+// 真正决定一条信息重不重要的是四类锚点：
+//   ① 时空锚点 —— 什么时候 / 在哪里（读者据此决定要不要记进日程）
+//   ② 行动锚点 —— 要求 + 具体动作（读者据此决定要做什么）
+//   ③ 影响锚点 —— 对象范围、变更、负面（影响面与风险）
+//   ④ 元信息    —— 讲的是工具本身（面板/配色/构建）而不是班级事务 → 降权
+// 三类锚点算加权分，再按档位渲染：core 必看 / key 关注 / plain 一般。
+
+/// 重点度档位。
+enum ImportanceTier {
+  /// 必看：含时空锚点或「要求 + 具体动作」，读者必须处理。
+  core,
+
+  /// 关注：与读者相关但不紧急。
+  key,
+
+  /// 一般：补充说明、明细罗列，不抢注意力。
+  plain,
+}
+
+/// 一句话的语义分析结果。
+class SentenceInfo {
+  const SentenceInfo({
+    required this.start,
+    required this.end,
+    required this.tier,
+    required this.score,
+    required this.tags,
+  });
+
+  final int start;
+  final int end;
+  final ImportanceTier tier;
+  final double score;
+
+  /// 命中的锚点标签（time / place / deadline / require / action /
+  /// scope / change / notice / neg / event / meta），便于调试与测试。
+  final Set<String> tags;
+
+  bool has(String tag) => tags.contains(tag);
+}
+
+// 时刻 / 日期 / 日期区间 / 点钟。数字型时间一律走正则，不依赖词表。
+final RegExp _reTime = RegExp(
+  r'\d{1,2}\s*[:：]\s*\d{2}'
+  r'|\d{1,2}\s*月\s*\d{1,2}\s*[日号]'
+  r'|\d{1,2}\s*/\s*\d{1,2}'
+  r'|\d{1,2}\s*[-–—~～至到]\s*\d{1,2}'
+  r'|\d{1,2}\s*[点时]',
+);
+// 周次 / 星期。
+final RegExp _reWeek = RegExp(r'第\s*\d+\s*周|\d+\s*周|周[一二三四五六日天末]');
+// 半天时段。
+final RegExp _reDayPart = RegExp(r'上午|下午|晚上|中午|早上|凌晨');
+// 相对时间与「自…起」。
+final RegExp _reRelative = RegExp(r'今天|明天|后天|下周|本周|本周末|自.{0,12}?起');
+// 截止/紧迫。
+final RegExp _reDeadline = RegExp(r'截止|之前|以前|以内|前完成|前提交|前交|尽早|尽快|逾期');
+// 地点后缀。不能用一个笼统的「任意中文 + 楼馆厅场室房区」：
+// 「2026级室内」会被切成「级室」、「广东省教育厅」会被当成「教育厅」。
+// 所以逐类收口——「室」排除后接「内/外」，「厅」只认会场类词。
+final RegExp _rePlaceSuffix = RegExp(
+  r'[\u4e00-\u9fa5]{1,4}楼'
+  r'|[\u4e00-\u9fa5]{1,4}室(?![内外])'
+  r'|[\u4e00-\u9fa5]{1,4}馆'
+  r'|[\u4e00-\u9fa5]{1,4}房'
+  r'|礼堂|报告厅|音乐厅|多功能厅|大厅'
+  r'|田径场|球场|操场|篮球场|足球场|排球场|羽毛球场|网球场|广场'
+  r'|空地|看台|校区',
+);
+// 强制/提示语气。「请」前面是「申」时不算（申请）。
+final RegExp _reRequire =
+    RegExp(r'务必|必须|须|不得|禁止|注意|切记|记得|按时|准时|要求|需要|(?:^|[^申])请');
+// 具体行动词：读者要动手做的事。
+final RegExp _reAction = RegExp(
+  r'填写|提交|上报|领取|办理|准备|带上|携带|参加|出席|报名|缴费|购买'
+  r'|交至|交到|交至本班|完成|申请|签字|核对|确认|请假|履行|到场|分流',
+);
+// 影响面：全体 / 各班 / 每人。
+final RegExp _reScope = RegExp(r'全体|所有|各班|每人|全员|全班|不漏一人|都要|每位|负责人');
+// 时间/地点/内容的变更。
+final RegExp _reChange =
+    RegExp(r'改为|换成|换至|调课|补课|停课|取消|新增|推迟|顺延|提前|调整|搬迁|迁移|替换|变更');
+// 通知类标记。
+final RegExp _reNotice = RegExp(r'通知|公告|提醒|告知|另行|留意|为准');
+// 具体数字（越具体越值得看）。
+final RegExp _reDigits = RegExp(r'\d');
+// 元信息：讲的是工具本身而不是班级事务 → 降权。
+final RegExp _reMeta = RegExp(
+  r'面板|标识|角标|配色|色板|界面|版式|样式|字体|布局|动画|交互|高亮|划词|划句'
+  r'|组件|字段|接口|缓存|离线|弹窗|版本|仓库|构建|部署|博客|App|后台|脚本|数据源'
+  r'|修复|优化|重构|回退|兜底|正文|条目|功能|支持|标签|格式|引用|来源|updated'
+  r'|meta\.',
+);
+
+/// 给一句话打分并定档。
+SentenceInfo analyseSentence(
+  String content,
+  int start,
+  int end, {
+  List<KwRange>? ranges,
+}) {
+  final text = content.substring(start, end);
+  final rs = ranges ?? highlightRanges(content);
+  final tags = <String>{};
+
+  var hasEvt = false;
+  var hasBld = false;
+  var hasNeg = false;
+  for (final r in rs) {
+    if (r.start >= end || r.end <= start) continue;
+    switch (r.category) {
+      case KwCategory.bld:
+        hasBld = true;
+      case KwCategory.evt:
+        hasEvt = true;
+      case KwCategory.neg:
+        hasNeg = true;
+      default:
+        break;
+    }
+  }
+
+  var score = 0.0;
+
+  if (_reTime.hasMatch(text)) {
+    score += 3;
+    tags.add('time');
+  }
+  if (_reWeek.hasMatch(text)) {
+    score += 2;
+    tags.add('time');
+  }
+  if (_reDayPart.hasMatch(text)) {
+    score += 1.5;
+    tags.add('time');
+  }
+  if (_reRelative.hasMatch(text)) {
+    score += 2;
+    tags.add('time');
+  }
+  if (_reDeadline.hasMatch(text)) {
+    score += 2.5;
+    tags.add('deadline');
+  }
+  if (hasBld || _rePlaceSuffix.hasMatch(text)) {
+    score += 2.5;
+    tags.add('place');
+  }
+
+  final require = _reRequire.hasMatch(text);
+  final action = _reAction.hasMatch(text);
+  if (require) {
+    score += 2.5;
+    tags.add('require');
+  }
+  if (action) {
+    score += 2;
+    tags.add('action');
+  }
+
+  if (hasEvt) {
+    score += 1;
+    tags.add('event');
+  }
+  if (hasNeg) {
+    score += 2;
+    tags.add('neg');
+  }
+  if (_reScope.hasMatch(text)) {
+    score += 2;
+    tags.add('scope');
+  }
+  if (_reChange.hasMatch(text)) {
+    score += 1.5;
+    tags.add('change');
+  }
+  if (_reNotice.hasMatch(text)) {
+    score += 1.5;
+    tags.add('notice');
+  }
+  if (_reDigits.hasMatch(text)) {
+    score += 0.5;
+  }
+
+  final metaHits = _reMeta.allMatches(text).length;
+  if (metaHits > 0) {
+    score -= 3.0 * (metaHits > 2 ? 2 : metaHits);
+    tags.add('meta');
+  }
+
+  // 定档规则：光有语气词（「请注意」）不算必看，
+  // 必须落到「时空锚点」或「要求 + 具体动作」上才算。
+  final anchored =
+      tags.contains('time') || tags.contains('place') || tags.contains('deadline');
+  final actionable = require && action;
+
+  final ImportanceTier tier;
+  if ((anchored && score >= 4.5) || (actionable && score >= 5) || score >= 9) {
+    tier = ImportanceTier.core;
+  } else if (score >= 2) {
+    tier = ImportanceTier.key;
+  } else {
+    tier = ImportanceTier.plain;
+  }
+
+  return SentenceInfo(
+    start: start,
+    end: end,
+    tier: tier,
+    score: score,
+    tags: tags,
+  );
+}
+
+/// 逐句分析整段文本的重点度。
+List<SentenceInfo> analyseSentences(String content, {List<KwRange>? ranges}) {
+  final rs = ranges ?? highlightRanges(content);
+  return [
+    for (final s in sentenceRanges(content))
+      analyseSentence(content, s.start, s.end, ranges: rs),
+  ];
+}
+
 /// 把文本切成「普通文本 + 关键词片段」序列，供富文本渲染。
 /// 切分基于 [highlightRanges]（含连片），与渲染端行为一致。
 List<({String text, KwCategory? category})> splitKeywords(String content) {
@@ -274,18 +524,42 @@ KwStyle kwStyleOf(KwCategory cat, bool isDark) {
   }
 }
 
-/// 「划句」底色：整句含重点词时铺一层很淡的荧光黄，像手写划重点。
+/// 划句底色：普通「关注」句铺一层很淡的荧光黄；「必看」句更浓一档，
+/// 让读者一眼分出「必须处理」与「知道就好」。
 const Color _sentenceBgLight = Color(0x2EFFD43B);
 const Color _sentenceBgDark = Color(0x1AFFD43B);
+const Color _coreBgLight = Color(0x4DFFD43B);
+const Color _coreBgDark = Color(0x33FFD43B);
+
+/// 必看句的句首竖条标记色。
+const Color _coreMarkLight = Color(0xFFFFA000);
+const Color _coreMarkDark = Color(0xFFFFD43B);
+
+Color? sentenceBgOf(ImportanceTier tier, bool isDark) {
+  switch (tier) {
+    case ImportanceTier.core:
+      return isDark ? _coreBgDark : _coreBgLight;
+    case ImportanceTier.key:
+      return isDark ? _sentenceBgDark : _sentenceBgLight;
+    case ImportanceTier.plain:
+      return null;
+  }
+}
 
 Paint _bgPaint(Color color) => Paint()..color = color;
 
-TextSpan _plainSpan(String text, TextStyle base, Color? sentenceBg) =>
+TextSpan _plainSpan(
+  String text,
+  TextStyle base,
+  Color? sentenceBg, {
+  bool emphasis = false,
+}) =>
     TextSpan(
       text: text,
-      style: sentenceBg == null
-          ? base
-          : base.copyWith(background: _bgPaint(sentenceBg)),
+      style: base.copyWith(
+        background: sentenceBg == null ? null : _bgPaint(sentenceBg),
+        fontWeight: emphasis ? FontWeight.w600 : base.fontWeight,
+      ),
     );
 
 InlineSpan _kwSpan(
@@ -341,10 +615,25 @@ InlineSpan _kwSpan(
   return WidgetSpan(alignment: PlaceholderAlignment.middle, child: child);
 }
 
+/// 「必看」句的句首竖条，纯装饰（复制文本时不会带上字符）。
+WidgetSpan _coreMarker(bool isDark) => WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Container(
+        width: 3,
+        height: 12,
+        margin: const EdgeInsets.only(right: 4),
+        decoration: BoxDecoration(
+          color: isDark ? _coreMarkDark : _coreMarkLight,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+
 /// 按句子 + 关键词切分并生成富文本 span。
 ///
-/// [baseStyle] 为普通文本样式。三层结构：
-/// 1. 划句：含重点词的整句铺淡荧光黄底；
+/// [baseStyle] 为普通文本样式。四层结构：
+/// 1. 划句定档：逐句算重点度，「必看」句浓荧光底 + 加粗 + 句首竖条，
+///    「关注」句淡荧光底，「一般」句不上底（只保留词上色）；
 /// 2. 划词：关键词按 6 类视觉规格着色（浅底 / 描边 / 划线叠加），
 ///    并与相邻的楼栋、房间号、周次、时间连成一片；
 /// 3. 划线：高亮词本身叠加同色划线（波浪 / 直线 / 虚线）。
@@ -353,25 +642,30 @@ List<InlineSpan> buildKeywordSpans(
   TextStyle baseStyle,
   bool isDark,
 ) {
+  if (content.isEmpty) return const <InlineSpan>[];
   final ranges = highlightRanges(content);
-  if (ranges.isEmpty) {
-    return content.isEmpty
-        ? const <InlineSpan>[]
-        : <InlineSpan>[TextSpan(text: content, style: baseStyle)];
-  }
+  final sentences = analyseSentences(content, ranges: ranges);
+
   final spans = <InlineSpan>[];
-  for (final sent in sentenceRanges(content)) {
+  for (final info in sentences) {
+    final bg = sentenceBgOf(info.tier, isDark);
     final hits = ranges
-        .where((r) => r.start < sent.end && r.end > sent.start)
+        .where((r) => r.start < info.end && r.end > info.start)
         .toList();
-    final sentenceBg =
-        hits.isEmpty ? null : (isDark ? _sentenceBgDark : _sentenceBgLight);
-    var pos = sent.start;
+    if (info.tier == ImportanceTier.core) {
+      spans.add(_coreMarker(isDark));
+    }
+    var pos = info.start;
     for (final r in hits) {
       final s = r.start < pos ? pos : r.start;
-      final e = r.end > sent.end ? sent.end : r.end;
+      final e = r.end > info.end ? info.end : r.end;
       if (s > pos) {
-        spans.add(_plainSpan(content.substring(pos, s), baseStyle, sentenceBg));
+        spans.add(_plainSpan(
+          content.substring(pos, s),
+          baseStyle,
+          bg,
+          emphasis: info.tier == ImportanceTier.core,
+        ));
       }
       spans.add(
         _kwSpan(
@@ -379,15 +673,18 @@ List<InlineSpan> buildKeywordSpans(
           r.category,
           baseStyle,
           isDark,
-          sentenceBg,
+          bg,
         ),
       );
       pos = e;
     }
-    if (pos < sent.end) {
-      spans.add(
-        _plainSpan(content.substring(pos, sent.end), baseStyle, sentenceBg),
-      );
+    if (pos < info.end) {
+      spans.add(_plainSpan(
+        content.substring(pos, info.end),
+        baseStyle,
+        bg,
+        emphasis: info.tier == ImportanceTier.core,
+      ));
     }
   }
   return spans;

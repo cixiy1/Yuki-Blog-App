@@ -91,6 +91,24 @@ class ChangelogPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppTheme.spacingSm),
+          // 重点度图例：底色深浅的含义（必看句还多一条句首竖条）
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _HintSwatch(
+                color: sentenceBgOf(ImportanceTier.core, isDark)!,
+                label: '必看 · 时间/地点/要办的事',
+                scheme: scheme,
+              ),
+              _HintSwatch(
+                color: sentenceBgOf(ImportanceTier.key, isDark)!,
+                label: '关注 · 相关但不必马上处理',
+                scheme: scheme,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
           // 与博客线一致：条目多时限制高度滚动，避免撑爆课表页
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 320),
@@ -111,6 +129,41 @@ class ChangelogPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 重点度图例的小色块。
+class _HintSwatch extends StatelessWidget {
+  const _HintSwatch({
+    required this.color,
+    required this.label,
+    required this.scheme,
+  });
+
+  final Color color;
+  final String label;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+        ),
+      ],
     );
   }
 }

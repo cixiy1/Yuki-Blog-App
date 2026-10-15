@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:yuki_blog_app/app/theme.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/keyword_highlight.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 /// 「本周调整」面板：换教室 / 停课 / 调课 / 新增 / 对调 / 提示 / 实践周。
 ///
-/// 无调整时整块隐藏。
+/// 无调整时整块隐藏。正文与通知/更新历同一套「语义重点度」高亮：
+/// 时间段、地点、要求动作一类的句子会拿到更重的底色。
 class WeekChangesPanel extends StatelessWidget {
   const WeekChangesPanel({super.key, required this.changes});
 
@@ -15,6 +17,7 @@ class WeekChangesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (changes.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: double.infinity,
@@ -73,12 +76,17 @@ class WeekChangesPanel extends StatelessWidget {
                       ),
                     ),
                     Expanded(
-                      child: Text(
-                        item.text,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          height: 1.45,
-                          color: scheme.onSurfaceVariant,
+                      child: Text.rich(
+                        TextSpan(
+                          children: buildKeywordSpans(
+                            item.text,
+                            TextStyle(
+                              fontSize: 12.5,
+                              height: 1.45,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            isDark,
+                          ),
                         ),
                       ),
                     ),

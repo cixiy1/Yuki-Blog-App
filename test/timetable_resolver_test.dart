@@ -90,8 +90,79 @@ void main() {
         const TextStyle(fontSize: 14),
         false,
       );
-      expect(spans.length, 5);
-      expect(spans.whereType<WidgetSpan>().length, 1);
+      // 首句含时空/负面锚点 → 必看，句首多一个竖条 WidgetSpan
+      expect(spans.first, isA<WidgetSpan>());
+      // 竖条 + 「周五机房」连片药丸（另两词只靠文字样式表达，不套 widget）
+      expect(spans.whereType<WidgetSpan>().length, 2);
+    });
+  });
+
+  group('语义重点度分档', () {
+    test('时空锚点句 → 必看；纯明细罗列 → 一般', () {
+      const t = '北校区2026级全体学生于10月15日–24日期间参加体质健康测试，'
+          '测试地点：北校区田径场看台后面。\n'
+          '室内项目：身高体重、立定跳远、坐位体前屈、肺活量、引体向上（男）/仰卧起坐（女）。';
+      final s = analyseSentences(t);
+      expect(s[0].tier, ImportanceTier.core);
+      expect(s[0].has('time'), isTrue);
+      expect(s[0].has('place'), isTrue);
+      expect(s[1].tier, ImportanceTier.plain);
+    });
+
+    test('要求 + 具体动作 → 必看', () {
+      const t = '须填写免测申请表并交至本班体育教师处，请尽早办理。';
+      final s = analyseSentence(t, 0, t.length);
+      expect(s.tier, ImportanceTier.core);
+      expect(s.has('require'), isTrue);
+      expect(s.has('action'), isTrue);
+    });
+
+    test('只有语气词、没有可执行动作 → 关注而非必看', () {
+      const t = '晚自习期间请自主规划学习内容、保持安静。';
+      final s = analyseSentence(t, 0, t.length);
+      expect(s.tier, ImportanceTier.key);
+    });
+
+    test('工具自身说明（面板/配色/构建）→ 降权为一般', () {
+      const t = '新增「数据更新历」面板与「最近更新于」标识。';
+      final s = analyseSentence(t, 0, t.length);
+      expect(s.tier, ImportanceTier.plain);
+      expect(s.has('meta'), isTrue);
+    });
+
+    test('地点正则不误判：室内 / 教育厅 不算地点', () {
+      const cases = [
+        '2026级室内项目由体育教师自行组织。',
+        '室外项目待广东省教育厅抽测通知后另行安排。',
+      ];
+      for (final t in cases) {
+        final s = analyseSentence(t, 0, t.length);
+        expect(s.has('place'), isFalse, reason: t);
+      }
+    });
+
+    test('真实军训服装通知：时间句/地点句/强制购买句全部必看', () {
+      const t = '北校区购买时间：10 月 23 日、24 日（周五、周六）每天 8:30—18:00；\n'
+          '购买地点：教学楼 118 前空地。\n'
+          '注意：军训服装全部新生都要买，申请免训的同学也要买。';
+      final coreTexts = analyseSentences(t)
+          .where((e) => e.tier == ImportanceTier.core)
+          .map((e) => t.substring(e.start, e.end).trim())
+          .toList();
+      expect(coreTexts, [
+        '北校区购买时间：10 月 23 日、24 日（周五、周六）每天 8:30—18:00；',
+        '购买地点：教学楼 118 前空地。',
+        '注意：军训服装全部新生都要买，申请免训的同学也要买。',
+      ]);
+    });
+
+    test('必看句渲染出句首标记，一般句不上底色', () {
+      final spans = buildKeywordSpans(
+        '2026年10月15日14:30到强能楼502开会。\n备注如下。',
+        const TextStyle(fontSize: 14),
+        false,
+      );
+      expect(spans.first, isA<WidgetSpan>());
     });
   });
 
