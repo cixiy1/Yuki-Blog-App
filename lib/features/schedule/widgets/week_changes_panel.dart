@@ -6,8 +6,10 @@ import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 /// 「本周调整」面板：换教室 / 停课 / 调课 / 新增 / 对调 / 提示 / 实践周。
 ///
-/// 无调整时整块隐藏。正文与通知/更新历同一套「语义重点度」高亮：
-/// 时间段、地点、要求动作一类的句子会拿到更重的底色。
+/// 无调整时整块隐藏。正文只走「词表着色」——课程名、地点、动作按类别上色加划线，
+/// 但**不铺句子底纹、不按档位加粗**：这里的文案是运行时用
+/// `「课程名」+ 调整说明` 拼出来的，不是可标注的整段原文；而且每一行本身
+/// 就是「这周要处理的事」，再叠一层档位底纹只会让列表变成一片花黄、看不出哪条是哪条。
 class WeekChangesPanel extends StatelessWidget {
   const WeekChangesPanel({super.key, required this.changes});
 
@@ -86,6 +88,7 @@ class WeekChangesPanel extends StatelessWidget {
                               color: scheme.onSurfaceVariant,
                             ),
                             isDark,
+                            tiered: false,
                           ),
                         ),
                       ),

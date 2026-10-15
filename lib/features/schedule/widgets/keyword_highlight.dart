@@ -722,11 +722,17 @@ WidgetSpan _coreMarker(bool isDark) => WidgetSpan(
 ///    并与相邻的楼栋、房间号、周次、时间连成一片；
 /// 3. 划线：波浪 / 实线 / 点线 / 虚线区分类别。
 /// 加粗只表示「人工判断的重点」，词表只表示「这是什么词」，两层不互相叠。
+///
+/// [tiered] 为 false 时**关掉整层「定档」**——不铺句子底色、不加句首竖条、
+/// 不因档位加粗，只做词表着色。用于「本周调整」这类**运行时拼出来的文案**
+/// （`「课程名」+ 调整说明`，不是整段原文，无法内联人工标注）：那里的每一行
+/// 本身就已是「这周要处理的事」，再叠档位底纹只会让整块列表变成一片花黄。
 List<InlineSpan> buildKeywordSpans(
   String content,
   TextStyle baseStyle,
-  bool isDark,
-) {
+  bool isDark, {
+  bool tiered = true,
+}) {
   if (content.isEmpty) return const <InlineSpan>[];
   final ann = parseAnnotations(content);
   final text = ann.text;
@@ -735,17 +741,20 @@ List<InlineSpan> buildKeywordSpans(
 
   final spans = <InlineSpan>[];
   for (final s in sentenceRanges(text)) {
-    final tier = sentenceTierOf(
-      text,
-      s.start,
-      s.end,
-      ann.marks,
-      ranges,
-      annotated: ann.isAnnotated,
-    );
+    final tier = !tiered
+        ? ImportanceTier.plain
+        : sentenceTierOf(
+            text,
+            s.start,
+            s.end,
+            ann.marks,
+            ranges,
+            annotated: ann.isAnnotated,
+          );
     final bg = sentenceBgOf(tier, isDark);
     // 算法定的必看句整句加粗；人工标注的只加粗标注的那几段。
-    final boldWhole = !ann.isAnnotated && tier == ImportanceTier.core;
+    final boldWhole =
+        tiered && !ann.isAnnotated && tier == ImportanceTier.core;
     if (tier == ImportanceTier.core) spans.add(_coreMarker(isDark));
 
     final hits = ranges
@@ -779,8 +788,9 @@ List<InlineSpan> buildKeywordSpans(
         }
       }
       // 只有「必看 / 关注」标注才加粗；「一般」标注是显式压档，不加粗。
-      final marked = mhits.any((m) =>
-          m.start < b && m.end > a && m.tier != ImportanceTier.plain);
+      final marked = tiered &&
+          mhits.any((m) =>
+              m.start < b && m.end > a && m.tier != ImportanceTier.plain);
       final seg = text.substring(a, b);
       if (hit != null) {
         spans.add(_kwSpan(

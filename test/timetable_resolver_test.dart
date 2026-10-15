@@ -199,6 +199,41 @@ void main() {
       expect(spans.last.style?.background, isNull);
     });
 
+    test('本周调整用只着色模式：不上底色、不按档位加粗、无句首竖条', () {
+      const raw = '「Java」停课：10/14（第 7 周周三）体育课停课，本周仅这一次';
+      // 默认（带定档）：算法会把含时空锚点的句子判成必看 → 铺底 + 竖条
+      final tiered = buildKeywordSpans(
+        raw,
+        const TextStyle(fontSize: 14),
+        false,
+      );
+      expect(tiered.first, isA<WidgetSpan>());
+      expect(
+        tiered.whereType<TextSpan>().any((s) => s.style?.background != null),
+        isTrue,
+      );
+
+      // 只着色：整行统一走 plain，底色/加粗/竖条全部不出现
+      final words = buildKeywordSpans(
+        raw,
+        const TextStyle(fontSize: 14),
+        false,
+        tiered: false,
+      );
+      expect(words.whereType<WidgetSpan>(), isEmpty);
+      for (final s in words.whereType<TextSpan>()) {
+        expect(s.style?.background, isNull);
+        expect(s.style?.fontWeight, isNot(FontWeight.w600));
+      }
+      // 词表着色仍在：课程名（subj/橙）与地点类词照旧上色
+      expect(
+        words
+            .whereType<TextSpan>()
+            .any((s) => s.style?.color != null && s.style!.color != const TextStyle().color),
+        isTrue,
+      );
+    });
+
     test('真实数据：压档条目全为一般、通知首句必看、有标注条目不漏判', () {
       for (final e in data.meta.changelog) {
         final ann = parseAnnotations(e.content);
