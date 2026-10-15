@@ -1,0 +1,18 @@
+# 固定签名参数 —— 全部由你自己填，本文件是模板，不会被构建读取。
+#
+# 用法（两步）：
+#   1) cp android/key.properties.example android/key.properties
+#   2) 填好下面每一项，然后执行： bash tool/gen_release_keystore.sh
+#
+# 安全：android/key.properties 与 *.jks 已在 android/.gitignore 里忽略，不会被提交。
+# 铁律：这份密钥库 + 口令一旦丢失，就永远无法再发布「可覆盖升级」的新版本。
+
+# ── 构建时读取（4 项必填）──────────────────────────────
+storePassword=<你自己设的密钥库口令>
+keyPassword=<你自己设的密钥口令，通常与上一项相同>
+keyAlias=<你自己设的别名，例如 yuki-blog>
+storeFile=release.jks
+
+# ── 仅第一次生成密钥库时读取（gen_release_keystore.sh 用）──
+dname=CN=<通用名>, OU=<组织单位>, O=<组织名>, L=<城市>, ST=<省份>, C=CN
+validityDays=10950
