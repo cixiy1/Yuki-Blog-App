@@ -367,8 +367,16 @@ void main() {
     late WeekSchedule w7;
     setUp(() => w7 = resolver.resolve(7));
 
-    test('周一至周五五列', () {
-      expect(w7.days, [1, 2, 3, 4, 5]);
+    test('列：周一至周五 + 周日（第 7 周体检顶行）', () {
+      expect(w7.days, [1, 2, 3, 4, 5, 7]);
+    });
+
+    test('周日 8:00 顶行是新生体检（自定义时段 + 周日列）', () {
+      final cells = w7.entriesAt(7, '8:00');
+      expect(cells.length, 1);
+      expect(cells.single.flag, '体检');
+      expect(cells.single.short, '新生体检');
+      expect(cells.single.room, contains('修德楼'));
     });
 
     test('周一 9-10/11 节 Web 补课，且顶掉晚自习', () {
@@ -492,8 +500,8 @@ void main() {
   });
 
   group('通知按真实周过滤', () {
-    test('真实第 7 周三条都显示', () {
-      expect(resolver.visibleNotices(7).length, 3);
+    test('真实第 7 周四条都显示', () {
+      expect(resolver.visibleNotices(7).length, 4);
     });
 
     test('真实第 13 周全部过期', () {
@@ -512,10 +520,10 @@ void main() {
   });
 
   group('模型解析', () {
-    test('15 门课、42 条 overrides、3 条通知', () {
+    test('15 门课、43 条 overrides、4 条通知', () {
       expect(data.courses.length, 15);
-      expect(data.overrides.length, 42);
-      expect(data.notices.length, 3);
+      expect(data.overrides.length, 43);
+      expect(data.notices.length, 4);
     });
 
     test('weeks 字符串与数组都支持', () {

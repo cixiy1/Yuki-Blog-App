@@ -118,8 +118,10 @@ void main() {
   testWidgets('点击格子展开详情，再点收起', (tester) async {
     await pumpTall(tester, wrapApp());
 
-    // 第一个格子 = 周一 1-2 习概
-    final firstCell = find.byType(CourseCell).first;
+    // 目标格 = 周一 1-2 习概（c01）。第 7 周起多了一行「体检」顶行（周日列），
+    // DOM 里第一个 CourseCell 不再是习概，必须按 entry.key 定位。
+    final firstCell = find.byWidgetPredicate(
+        (w) => w is CourseCell && w.entry.key == 'c01');
     await tester.ensureVisible(firstCell);
     await tester.tap(firstCell);
     await tester.pumpAndSettle();
@@ -137,8 +139,9 @@ void main() {
   testWidgets('课程详情的调整说明走高亮：只有词表着色，不铺句子底纹', (tester) async {
     await pumpTall(tester, wrapApp());
 
-    // 第一个格子 = 周一 1-2 习概（本周带「换地点」长期说明）
-    final firstCell = find.byType(CourseCell).first;
+    // 目标格 = 周一 1-2 习概（c01，本周带「换地点」长期说明）
+    final firstCell = find.byWidgetPredicate(
+        (w) => w is CourseCell && w.entry.key == 'c01');
     await tester.ensureVisible(firstCell);
     await tester.tap(firstCell);
     await tester.pumpAndSettle();
