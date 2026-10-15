@@ -176,7 +176,6 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           ),
         ),
         const SizedBox(height: AppTheme.spacingMd),
-        NoticesPanel(notices: notices),
         if (!schedule.hasClass) _NoClassBanner(week: _viewWeek),
         TimetableGrid(
           schedule: schedule,
@@ -186,6 +185,8 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           onSelectEntry: _selectEntry,
         ),
         const SizedBox(height: AppTheme.spacingMd),
+        // 通知栏置于课表网格之下（与网页版布局一致）
+        NoticesPanel(notices: notices),
         const TimetableLegend(),
         if (selected != null) ...[
           const SizedBox(height: AppTheme.spacingMd),

@@ -2,7 +2,7 @@
     <!-- 课表数据网络同步必需（release 构建不会自动注入） -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Yuki-Blog App"
+        android:label="Yuki Blog"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

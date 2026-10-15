@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/keyword_highlight.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 通知面板：与课表网格解耦，数据驱动。
 ///
 /// 通知按「真实周次」过滤（不随浏览的周次变化），
 /// 过期自动消失；多条全部展示。
+/// 标题与正文按 6 类关键词高亮（与更新历同款）。
 class NoticesPanel extends StatelessWidget {
   const NoticesPanel({super.key, required this.notices});
 
@@ -15,6 +17,7 @@ class NoticesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (notices.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: double.infinity,
@@ -69,27 +72,37 @@ class NoticesPanel extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            notice.title,
+                          child: Text.rich(
+                            TextSpan(
+                              children: buildKeywordSpans(
+                                notice.title,
+                                TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurface,
+                                ),
+                                isDark,
+                              ),
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onSurface,
-                            ),
                           ),
                         ),
                       ],
                     ),
                     if (notice.text.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Text(
-                        notice.text,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.5,
-                          color: scheme.onSurfaceVariant,
+                      Text.rich(
+                        TextSpan(
+                          children: buildKeywordSpans(
+                            notice.text,
+                            TextStyle(
+                              fontSize: 12,
+                              height: 1.5,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            isDark,
+                          ),
                         ),
                       ),
                     ],

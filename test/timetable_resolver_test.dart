@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
-import 'package:yuki_blog_app/features/schedule/widgets/changelog_panel.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/keyword_highlight.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 直接用仓库里的真实 JSON 做单测（与博客线数据同源）。

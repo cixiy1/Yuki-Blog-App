@@ -1,4 +1,4 @@
-# Yuki-Blog App
+# Yuki Blog
 
 The mobile app of [Yuki-blog](https://yiyu14.top), built for Class 2615.
 
