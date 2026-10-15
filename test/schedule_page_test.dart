@@ -54,6 +54,21 @@ void main() {
 
     // 有课程格子
     expect(find.byType(CourseCell), findsWidgets);
+
+    // 数据更新历在页面最底部（超出视口，懒构建）：滚动到底再断言。
+    // 页面里有多个 Scrollable（网格横向滚动），须显式指定纵向的列表。
+    final verticalList = find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    ).first;
+    await tester.scrollUntilVisible(
+      find.text('数据更新历'),
+      600,
+      scrollable: verticalList,
+      maxScrolls: 20,
+    );
+    expect(find.text('数据更新历'), findsOneWidget);
+    expect(find.text('最近更新于 2026-10-15'), findsOneWidget);
+    expect(find.textContaining('团支书'), findsWidgets); // 更新历 + 通知区
   });
 
   testWidgets('点击格子展开详情，再点收起', (tester) async {

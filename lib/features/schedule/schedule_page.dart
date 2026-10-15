@@ -4,6 +4,7 @@ import 'package:yuki_blog_app/core/network_timetable_repository.dart';
 import 'package:yuki_blog_app/core/timetable_repository.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/changelog_panel.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_detail_panel.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/notices_panel.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
@@ -189,10 +190,12 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           const SizedBox(height: AppTheme.spacingMd),
           WeekChangesPanel(changes: schedule.changes),
         ],
+        const SizedBox(height: AppTheme.spacingMd),
+        ChangelogPanel(meta: meta),
         const SizedBox(height: AppTheme.spacingLg),
         Center(
           child: Text(
-            '数据更新于 ${meta.updated} · 周次基准 ${_formatDate(meta.week1Monday)}',
+            '最近更新于 ${meta.updated} · 周次基准 ${_formatDate(meta.week1Monday)}',
             style: TextStyle(
               fontSize: 10,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.7),

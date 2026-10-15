@@ -22,6 +22,13 @@ void main() {
       expect(resolver.currentWeek(DateTime(2026, 10, 15)), 7);
     });
 
+    test('meta.changelog 解析：8 条、最新在前', () {
+      expect(data.meta.changelog.length, 8);
+      expect(data.meta.changelog.first.date, '2026-10-15');
+      expect(data.meta.changelog.first.content, contains('团支书'));
+      expect(data.meta.updated, '2026-10-15');
+    });
+
     test('第 1 周周一 = 2026-08-31', () {
       expect(resolver.mondayOf(1), DateTime(2026, 8, 31));
       expect(resolver.sundayOf(1), DateTime(2026, 9, 6));

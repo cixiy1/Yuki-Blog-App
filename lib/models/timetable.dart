@@ -223,6 +223,7 @@ class TimetableMeta {
     required this.week1Monday,
     required this.totalWeeks,
     required this.updated,
+    this.changelog = const [],
     required this.periods,
     required this.slots,
     required this.selfStudy,
@@ -237,6 +238,9 @@ class TimetableMeta {
   final DateTime week1Monday;
   final int totalWeeks;
   final String updated;
+
+  /// 数据更新历（最新在前），与博客线 meta.changelog 同构。
+  final List<ChangelogEntry> changelog;
   final List<PeriodInfo> periods;
   final Map<String, SlotInfo> slots;
   final SelfStudyConfig selfStudy;
@@ -255,6 +259,9 @@ class TimetableMeta {
       week1Monday: DateTime.parse(json['week1Monday'] as String),
       totalWeeks: json['totalWeeks'] as int? ?? 19,
       updated: json['updated'] as String? ?? '',
+      changelog: (json['changelog'] as List<dynamic>? ?? [])
+          .map((e) => ChangelogEntry.fromJson(e as Map<String, dynamic>))
+          .toList(),
       periods: (json['periods'] as List<dynamic>? ?? [])
           .map((e) => PeriodInfo.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -264,6 +271,22 @@ class TimetableMeta {
       practice: (json['practice'] as List<dynamic>? ?? [])
           .map((e) => PracticeWeek.fromJson(e as Map<String, dynamic>))
           .toList(),
+    );
+  }
+}
+
+/// 一条数据更新记录（meta.changelog 元素，最新在前）。
+class ChangelogEntry {
+  const ChangelogEntry({required this.date, required this.content});
+
+  /// 变更日期，格式 `YYYY-MM-DD`。
+  final String date;
+  final String content;
+
+  factory ChangelogEntry.fromJson(Map<String, dynamic> json) {
+    return ChangelogEntry(
+      date: json['date'] as String? ?? '',
+      content: json['content'] as String? ?? '',
     );
   }
 }
