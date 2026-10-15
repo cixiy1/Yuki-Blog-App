@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:yuki_blog_app/core/asset_timetable_repository.dart';
+import 'package:yuki_blog_app/core/network_timetable_repository.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
 import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
@@ -69,6 +73,45 @@ void main() {
     expect(find.text('数据更新历'), findsOneWidget);
     expect(find.textContaining('最近更新于'), findsWidgets);
     expect(find.textContaining('团支书'), findsWidgets); // 更新历 + 通知区
+  });
+
+  testWidgets('网络同步失败时置顶展示离线数据提醒', (tester) async {
+    final staleRepo = SyncTimetableRepository(
+      client: MockClient((req) async => http.Response('offline', 503)),
+    );
+    await pumpTall(
+      tester,
+      MaterialApp(
+        home: Scaffold(
+          body: SchedulePage(repository: staleRepo),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('网络同步失败'), findsOneWidget);
+    expect(find.textContaining('可能不是最新'), findsOneWidget);
+    // 正常展示课表内容（离线兜底生效）
+    expect(find.text('软件2615 · 动态课程表'), findsOneWidget);
+  });
+
+  testWidgets('网络同步成功时不展示离线提醒', (tester) async {
+    final okRepo = SyncTimetableRepository(
+      client: MockClient((req) async => http.Response.bytes(
+            utf8.encode(
+                File('assets/data/schedule-2615.json').readAsStringSync()),
+            200,
+          )),
+    );
+    await pumpTall(
+      tester,
+      MaterialApp(
+        home: Scaffold(
+          body: SchedulePage(repository: okRepo),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('网络同步失败'), findsNothing);
   });
 
   testWidgets('点击格子展开详情，再点收起', (tester) async {

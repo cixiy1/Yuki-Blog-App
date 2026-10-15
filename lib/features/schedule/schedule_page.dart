@@ -67,7 +67,11 @@ class _SchedulePageState extends State<SchedulePage> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          return _ScheduleBody(data: snapshot.data!);
+          // 网络拉取失败回退到离线数据时，提醒用户数据可能过期
+          final repo = _effectiveRepository;
+          final stale =
+              repo is SyncTimetableRepository && repo.usingFallback.value;
+          return _ScheduleBody(data: snapshot.data!, stale: stale);
         },
       ),
     );
@@ -75,9 +79,12 @@ class _SchedulePageState extends State<SchedulePage> {
 }
 
 class _ScheduleBody extends StatefulWidget {
-  const _ScheduleBody({required this.data});
+  const _ScheduleBody({required this.data, required this.stale});
 
   final TimetableData data;
+
+  /// true = 网络同步失败，当前为离线回退数据（可能不是最新）。
+  final bool stale;
 
   @override
   State<_ScheduleBody> createState() => _ScheduleBodyState();
@@ -147,6 +154,7 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
         AppTheme.spacingXl,
       ),
       children: [
+        if (widget.stale) _StaleDataBanner(updated: meta.updated),
         _ScheduleHeader(meta: meta),
         const SizedBox(height: AppTheme.spacingMd),
         WeekBar(
@@ -251,8 +259,58 @@ class _ScheduleHeader extends StatelessWidget {
   }
 }
 
-class _NoClassBanner extends StatelessWidget {
-  const _NoClassBanner({required this.week});
+/// 离线数据提醒横幅：网络同步失败回退本地数据时置顶展示，
+/// 明确告知用户当前数据可能不是最新。
+class _StaleDataBanner extends StatelessWidget {
+  const _StaleDataBanner({required this.updated});
+
+  final String updated;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFFFA94D); // 暖橙警示，与更新历色板呼应
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: accent.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.wifi_off, size: 16, color: accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: scheme.onSurface,
+                ),
+                children: [
+                  const TextSpan(
+                    text: '网络同步失败，当前展示离线数据',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (updated.isNotEmpty)
+                    TextSpan(text: '（最近更新于 $updated）'),
+                  const TextSpan(text: '，可能不是最新。恢复网络后重新进入即可同步。'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoClassBanner extends StatelessWidget {  const _NoClassBanner({required this.week});
 
   final int week;
 

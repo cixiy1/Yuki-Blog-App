@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:yuki_blog_app/core/asset_timetable_repository.dart';
@@ -73,6 +74,8 @@ class RemoteTimetableRepository implements TimetableRepository {
 ///
 /// - 网络可用 → 拉取博客线上最新课表（自动同步，无需发版）
 /// - 网络失败 → 回退打包进 App 的 `assets/data/schedule-2615.json`
+///
+/// 回退时 [usingFallback] 置为 true，UI 据此提示「数据可能不是最新」。
 class SyncTimetableRepository implements TimetableRepository {
   SyncTimetableRepository({
     http.Client? client,
@@ -83,19 +86,28 @@ class SyncTimetableRepository implements TimetableRepository {
   final RemoteTimetableRepository _remote;
   final String assetPath;
 
+  /// 当前展示的数据是否来自离线回退（true = 网络拉取失败，数据可能过期）。
+  final ValueNotifier<bool> usingFallback = ValueNotifier(false);
+
   @override
   Future<TimetableData> loadTimetable() async {
     try {
-      return await _remote.loadTimetable();
+      final data = await _remote.loadTimetable();
+      usingFallback.value = false;
+      return data;
     } on TimetableNetworkException {
       // 离线 / 代理异常：回退本地资源，保证课表始终可用。
+      usingFallback.value = true;
       final raw = await rootBundle.loadString(assetPath);
       return raw.decodeTimetable();
     }
   }
 
-  /// 释放底层网络连接（仅在页面持有自建数据源时调用）。
-  void dispose() => _remote.dispose();
+  /// 释放底层网络连接与状态通知器（仅在页面持有自建数据源时调用）。
+  void dispose() {
+    _remote.dispose();
+    usingFallback.dispose();
+  }
 }
 
 /// 网络拉取失败时抛出，[failures] 记录每个候选地址的失败原因。
