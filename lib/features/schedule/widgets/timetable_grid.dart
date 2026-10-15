@@ -91,7 +91,8 @@ class TimetableGrid extends StatelessWidget {
                               child: const EmptyCourseCell(),
                             );
                           }
-                          // 一格多条（罕见）：纵向堆叠
+                          // 解析器已按「本周实际 > 晚自习 > 非本周」保证一格一条，
+                          // 这里仍按列表渲染，留作多条的兜底（纵向堆叠）。
                           return SizedBox(
                             width: cellWidth,
                             child: Column(

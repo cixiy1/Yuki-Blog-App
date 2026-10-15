@@ -89,6 +89,15 @@ class ResolvedEntry {
 
   String get cellKey => '$day-$slot';
 
+  /// 同一格内的显示优先级：本周实际发生（有课 / 停课 / 新增）> 晚自习 > 非本周占位。
+  ///
+  /// 与博客线渲染器 `render()` 里的取格规则一致：一格只显示一条，
+  /// 目的是别让「非本周」的旧课卡压在晚自习上（如周三 9-10 的 Java 只在第 4 周）。
+  int get cellPriority {
+    if (selfStudy) return 1;
+    return status == CellStatus.off ? 0 : 2;
+  }
+
   /// 地点展示：有原教室时并列显示「新（原旧）」。
   String get roomDisplay {
     if (originalRoom != null && originalRoom!.isNotEmpty && room.isNotEmpty) {
@@ -408,9 +417,18 @@ class TimetableResolver {
     final sortedDays = days.toList()..sort();
 
     // ── 6. 单元格索引 + 本周调整 ────────────────────────────────
+    // 一格只留一条：本周实际发生 > 晚自习 > 非本周占位；同级后者胜出。
+    // 与博客线渲染器的取格规则一致，避免「非本周」灰卡与晚自习同格堆叠。
     final cells = <String, List<ResolvedEntry>>{};
     for (final e in entries) {
-      cells.putIfAbsent(e.cellKey, () => []).add(e);
+      final list = cells.putIfAbsent(e.cellKey, () => <ResolvedEntry>[]);
+      if (list.isEmpty) {
+        list.add(e);
+      } else if (e.cellPriority >= list.last.cellPriority) {
+        list
+          ..clear()
+          ..add(e);
+      }
     }
 
     final changes = <ChangeItem>[];
