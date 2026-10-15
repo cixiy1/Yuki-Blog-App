@@ -1,7 +1,7 @@
 name: yuki_blog_app
 description: "Yuki Blog - the mobile app of Yuki-blog, built for Class 2615."
 publish_to: 'none'
-version: 1.4.0+9
+version: 1.4.1+10
 
 environment:
   sdk: ^3.13.5
