@@ -92,8 +92,8 @@ void main() {
       );
       // 首句含时空/负面锚点 → 必看，句首多一个竖条 WidgetSpan
       expect(spans.first, isA<WidgetSpan>());
-      // 竖条 + 「周五机房」连片药丸（另两词只靠文字样式表达，不套 widget）
-      expect(spans.whereType<WidgetSpan>().length, 2);
+      // 关键词不再套色块药丸，因此全篇只有「必看句首竖条」这一个 WidgetSpan
+      expect(spans.whereType<WidgetSpan>().length, 1);
     });
   });
 
@@ -178,6 +178,25 @@ void main() {
       for (final s in flat) {
         expect(s.style?.background, isNull);
       }
+    });
+
+    test('渲染降噪：只有必看句铺底色，关键词不套底色块', () {
+      final spans = buildKeywordSpans(
+        '{{周五机房停电}}。请提前到强能楼502集合。',
+        const TextStyle(fontSize: 14),
+        false,
+      );
+      // 唯一的 WidgetSpan 是必看句的句首竖条（关键词已不套色块药丸）
+      expect(spans.first, isA<WidgetSpan>());
+      expect(spans.whereType<WidgetSpan>().length, 1);
+      // 底色只落在必看句；第二句（无标注 → 一般）不上底色
+      final withBg = spans
+          .whereType<TextSpan>()
+          .where((s) => s.style?.background != null)
+          .map((s) => s.text)
+          .join();
+      expect(withBg, '周五机房停电。');
+      expect(spans.last.style?.background, isNull);
     });
 
     test('真实数据：压档条目全为一般、通知首句必看、有标注条目不漏判', () {

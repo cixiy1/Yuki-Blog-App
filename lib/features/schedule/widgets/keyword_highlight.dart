@@ -583,21 +583,23 @@ List<({String text, KwCategory? category})> splitKeywords(String content) {
 }
 
 /// 单个类别的视觉规格（颜色取自亮/暗色板，与博客线一致）。
+///
+/// 密度取舍：关键词一律**不用底色块、不用描边框**，只用「着色 + 同色划线」
+/// 表达类别——底色只留给「必看句」一个层级，避免彩块叠在荧光底上显得杂乱。
+/// 六类的区分靠颜色 + 划线样式（波浪 / 实线 / 点线 / 虚线）。
 class KwStyle {
   const KwStyle({
     required this.color,
-    this.background,
-    this.border,
     this.underline,
     this.dashed = false,
+    this.dotted = false,
     this.wavy = false,
   });
 
   final Color color;
-  final Color? background;
-  final Color? border;
   final Color? underline;
   final bool dashed;
+  final bool dotted;
   final bool wavy;
 }
 
@@ -605,32 +607,16 @@ KwStyle kwStyleOf(KwCategory cat, bool isDark) {
   switch (cat) {
     case KwCategory.role:
       final color = isDark ? const Color(0xFFB197FC) : const Color(0xFF9775FA);
-      return KwStyle(
-        color: color,
-        background: isDark ? const Color(0x339775FA) : const Color(0x299775FA),
-        underline: color,
-        wavy: true,
-      );
+      return KwStyle(color: color, underline: color, wavy: true);
     case KwCategory.bld:
       final color = isDark ? const Color(0xFF8CE99A) : const Color(0xFF51CF66);
-      return KwStyle(
-        color: color,
-        background: isDark ? const Color(0x2E69DB7C) : const Color(0x2969DB7C),
-        underline: color,
-      );
+      return KwStyle(color: color, underline: color);
     case KwCategory.subj:
-      return KwStyle(
-        color: isDark ? const Color(0xFFFFA94D) : const Color(0xFFFF922B),
-        border: const Color(0xFFFFA94D),
-        underline: const Color(0xFFFF922B),
-      );
+      final color = isDark ? const Color(0xFFFFA94D) : const Color(0xFFFF922B);
+      return KwStyle(color: color, underline: color, dotted: true);
     case KwCategory.evt:
       final color = isDark ? const Color(0xFF74C0FC) : const Color(0xFF4DABF7);
-      return KwStyle(
-        color: color,
-        background: isDark ? const Color(0x334DABF7) : const Color(0x294DABF7),
-        underline: color,
-      );
+      return KwStyle(color: color, underline: color);
     case KwCategory.act:
       return KwStyle(
         color: isDark ? const Color(0xFFFAA2C1) : const Color(0xFFF06595),
@@ -645,12 +631,10 @@ KwStyle kwStyleOf(KwCategory cat, bool isDark) {
   }
 }
 
-/// 划句底色：普通「关注」句铺一层很淡的荧光黄；「必看」句更浓一档，
-/// 让读者一眼分出「必须处理」与「知道就好」。
-const Color _sentenceBgLight = Color(0x2EFFD43B);
-const Color _sentenceBgDark = Color(0x1AFFD43B);
-const Color _coreBgLight = Color(0x4DFFD43B);
-const Color _coreBgDark = Color(0x33FFD43B);
+/// 划句底色：只给「必看」句铺一层淡荧光黄 + 句首竖条。
+/// 「关注」句不铺底色（靠标注片段加粗体现），否则一屏里黄底连片、反而看不出重点。
+const Color _coreBgLight = Color(0x38FFD43B);
+const Color _coreBgDark = Color(0x24FFD43B);
 
 /// 必看句的句首竖条标记色。
 const Color _coreMarkLight = Color(0xFFFFA000);
@@ -661,7 +645,6 @@ Color? sentenceBgOf(ImportanceTier tier, bool isDark) {
     case ImportanceTier.core:
       return isDark ? _coreBgDark : _coreBgLight;
     case ImportanceTier.key:
-      return isDark ? _sentenceBgDark : _sentenceBgLight;
     case ImportanceTier.plain:
       return null;
   }
@@ -688,52 +671,32 @@ InlineSpan _kwSpan(
   KwCategory cat,
   TextStyle base,
   bool isDark,
-  Color? sentenceBg,
-) {
+  Color? sentenceBg, {
+  bool emphasis = false,
+}) {
   final style = kwStyleOf(cat, isDark);
-  final kwTextStyle = base.copyWith(
-    color: style.color,
-    fontWeight: FontWeight.w600,
-    background: sentenceBg == null ? null : _bgPaint(sentenceBg),
-    decoration:
-        style.underline != null ? TextDecoration.underline : null,
-    decorationColor: style.underline,
-    decorationThickness: 2,
-    decorationStyle: style.dashed
-        ? TextDecorationStyle.dashed
-        : (style.wavy ? TextDecorationStyle.wavy : TextDecorationStyle.solid),
-  );
-  // 只靠文字样式表达的类别（act/neg：下划线/虚线）不套底色药丸，
-  // 划句底色直接由 TextStyle.background 承担。
-  if (style.background == null && style.border == null) {
-    return TextSpan(text: text, style: kwTextStyle);
-  }
-  Widget child = Container(
-    padding: EdgeInsets.symmetric(
-      horizontal: 3,
-      vertical: style.border != null ? 0.5 : 1,
+  // 关键词不套色块/描边（见 KwStyle 注释），只用「类别色 + 同色划线」
+  // （波浪 / 实线 / 点线 / 虚线）表达；必看句的荧光底垫在字下。
+  // 加粗只留给人工标注的片段：词表负责「这是什么」，人工负责「值不值得看」，
+  // 两件事不重叠，屏幕才不会又花又乱。
+  return TextSpan(
+    text: text,
+    style: base.copyWith(
+      color: style.color,
+      fontWeight: emphasis ? FontWeight.w600 : base.fontWeight,
+      background: sentenceBg == null ? null : _bgPaint(sentenceBg),
+      decoration: style.underline != null ? TextDecoration.underline : null,
+      decorationColor: style.underline,
+      decorationThickness: 1.5,
+      decorationStyle: style.dashed
+          ? TextDecorationStyle.dashed
+          : (style.dotted
+              ? TextDecorationStyle.dotted
+              : (style.wavy
+                  ? TextDecorationStyle.wavy
+                  : TextDecorationStyle.solid)),
     ),
-    decoration: BoxDecoration(
-      color: style.background,
-      borderRadius: style.border != null ? BorderRadius.circular(4) : null,
-      border: style.border != null
-          ? Border.all(color: style.border!, width: 1.5)
-          : null,
-    ),
-    child: Text(text, style: kwTextStyle),
   );
-  if (sentenceBg != null) {
-    // 划句底色垫在高亮词片下面，让整句的荧光层连续。
-    child = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-        color: sentenceBg,
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: child,
-    );
-  }
-  return WidgetSpan(alignment: PlaceholderAlignment.middle, child: child);
 }
 
 /// 「必看」句的句首竖条，纯装饰（复制文本时不会带上字符）。
@@ -753,12 +716,12 @@ WidgetSpan _coreMarker(bool isDark) => WidgetSpan(
 /// 按「人工标注 + 句子 + 关键词」三层切分并生成富文本 span。
 ///
 /// [baseStyle] 为普通文本样式。三层结构，各司其职：
-/// 1. 定档（必看 / 关注 / 一般）：有内联标注就以标注为准，标注的片段加粗、
-///    所在句铺荧光底（必看更浓且带句首竖条）；整段无标注时回退到语义评分，
-///    由算法定档（必看句整句加粗）；
-/// 2. 划词：关键词按 6 类视觉规格着色（浅底 / 描边 / 划线叠加），
+/// 1. 定档：只有「必看」句铺一层淡荧光底 + 句首竖条；「关注」句不铺底色，
+///    只把被人工标注的片段加粗；「一般」句不上任何底色与加粗；
+/// 2. 划词：关键词按 6 类着色（只用颜色 + 同色划线，不套色块/描边、不加粗），
 ///    并与相邻的楼栋、房间号、周次、时间连成一片；
-/// 3. 划线：高亮词本身叠加同色划线（波浪 / 直线 / 虚线）。
+/// 3. 划线：波浪 / 实线 / 点线 / 虚线区分类别。
+/// 加粗只表示「人工判断的重点」，词表只表示「这是什么词」，两层不互相叠。
 List<InlineSpan> buildKeywordSpans(
   String content,
   TextStyle baseStyle,
@@ -820,7 +783,14 @@ List<InlineSpan> buildKeywordSpans(
           m.start < b && m.end > a && m.tier != ImportanceTier.plain);
       final seg = text.substring(a, b);
       if (hit != null) {
-        spans.add(_kwSpan(seg, hit.category, baseStyle, isDark, bg));
+        spans.add(_kwSpan(
+          seg,
+          hit.category,
+          baseStyle,
+          isDark,
+          bg,
+          emphasis: marked || boldWhole,
+        ));
       } else {
         spans.add(_plainSpan(
           seg,

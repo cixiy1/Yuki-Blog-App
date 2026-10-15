@@ -91,19 +91,18 @@ class ChangelogPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppTheme.spacingSm),
-          // 重点度图例：底色深浅的含义（必看句还多一条句首竖条）
+          // 重点度图例：只有「必看」铺底色；「关注」体现为标注处加粗
           Wrap(
             spacing: 12,
             runSpacing: 4,
             children: [
               _HintSwatch(
-                color: sentenceBgOf(ImportanceTier.core, isDark)!,
-                label: '必看 · 时间/地点/要办的事',
+                color: sentenceBgOf(ImportanceTier.core, isDark),
+                label: '必看 · 黄底 + 句首竖条',
                 scheme: scheme,
               ),
               _HintSwatch(
-                color: sentenceBgOf(ImportanceTier.key, isDark)!,
-                label: '关注 · 相关但不必马上处理',
+                label: '关注 · 标注处加粗',
                 scheme: scheme,
               ),
             ],
@@ -133,15 +132,16 @@ class ChangelogPanel extends StatelessWidget {
   }
 }
 
-/// 重点度图例的小色块。
+/// 重点度图例的小色块：有颜色画色块（必看=荧光底），
+/// 无颜色画一个加粗的「Aa」代表「关注=标注处加粗」。
 class _HintSwatch extends StatelessWidget {
   const _HintSwatch({
-    required this.color,
+    this.color,
     required this.label,
     required this.scheme,
   });
 
-  final Color color;
+  final Color? color;
   final String label;
   final ColorScheme scheme;
 
@@ -150,14 +150,24 @@ class _HintSwatch extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
+        if (color == null)
+          Text(
+            'Aa',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface,
+            ),
+          )
+        else
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+            ),
           ),
-        ),
         const SizedBox(width: 4),
         Text(
           label,
