@@ -6,14 +6,25 @@ enum KwCategory { role, bld, subj, evt, act, neg }
 /// 关键词 → 类别映射（与博客线 TT_KW_MAP 同步维护：
 /// 博客改词表时这里要同步）。
 const Map<String, KwCategory> kwMap = {
+  // 角色
   '团支书': KwCategory.role,
   '班长': KwCategory.role,
+  '辅导员': KwCategory.role,
+  // 楼宇 / 地点
   '修德楼': KwCategory.bld,
   '强能楼': KwCategory.bld,
+  '教学楼': KwCategory.bld,
+  '大礼堂': KwCategory.bld,
+  'G1楼': KwCategory.bld,
+  '机房': KwCategory.bld,
+  '宿舍': KwCategory.bld,
+  // 科目
   '习概': KwCategory.subj,
   'Web': KwCategory.subj,
   'Java': KwCategory.subj,
   '军事理论': KwCategory.subj,
+  '体育': KwCategory.subj,
+  // 事项
   '晚自习': KwCategory.evt,
   '体测': KwCategory.evt,
   '入党谈话': KwCategory.evt,
@@ -21,15 +32,23 @@ const Map<String, KwCategory> kwMap = {
   '班委竞选': KwCategory.evt,
   '反诈': KwCategory.evt,
   '军训': KwCategory.evt,
-  '机房': KwCategory.evt,
   '劳动实践': KwCategory.evt,
-  '宿舍': KwCategory.evt,
+  '考试': KwCategory.evt,
+  '讲座': KwCategory.evt,
+  '抽查': KwCategory.evt,
+  '返校': KwCategory.evt,
+  '放假': KwCategory.evt,
+  '元旦': KwCategory.evt,
+  '中秋': KwCategory.evt,
+  '国庆': KwCategory.evt,
+  // 动作
   '改为': KwCategory.act,
   '换至': KwCategory.act,
   '新增': KwCategory.act,
   '落实': KwCategory.act,
   '调整': KwCategory.act,
   '归档': KwCategory.act,
+  // 负面动作
   '取消': KwCategory.neg,
   '停课': KwCategory.neg,
 };
