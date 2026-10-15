@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/changelog_panel.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 直接用仓库里的真实 JSON 做单测（与博客线数据同源）。
@@ -15,6 +16,25 @@ void main() {
   setUp(() {
     data = _loadData();
     resolver = TimetableResolver(data);
+  });
+
+  group('更新历关键词高亮', () {
+    test('长词优先：劳动实践 不被截断，类别正确', () {
+      final parts =
+          splitKeywords('新增劳动实践（W16周二），请交给团支书');
+      final kws =
+          parts.where((p) => p.category != null).toList();
+      expect(kws.map((k) => k.text).join('|'), '新增|劳动实践|团支书');
+      expect(kws[0].category, KwCategory.act);
+      expect(kws[1].category, KwCategory.evt);
+      expect(kws[2].category, KwCategory.role);
+    });
+
+    test('无关键词时返回单段原文', () {
+      final parts = splitKeywords('一段没有任何重点词的普通描述');
+      expect(parts.length, 1);
+      expect(parts.single.category, isNull);
+    });
   });
 
   group('周次计算', () {
