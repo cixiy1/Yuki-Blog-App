@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/keyword_highlight.dart';
@@ -34,6 +35,63 @@ void main() {
       final parts = splitKeywords('一段没有任何重点词的普通描述');
       expect(parts.length, 1);
       expect(parts.single.category, isNull);
+    });
+
+    test('划词连片：楼栋房间号前缀与关键词连成一片', () {
+      final parts = splitKeywords('G1楼401机房停电');
+      final kws = parts.where((p) => p.category != null).toList();
+      expect(kws.first.text, 'G1楼401机房');
+      expect(kws.first.category, KwCategory.bld);
+      expect(kws.last.text, '停电');
+      expect(kws.last.category, KwCategory.neg);
+    });
+
+    test('划词连片：动词类（act/neg）不连片，负面词不被吞并', () {
+      final parts = splitKeywords('第12周改为线上');
+      final kws = parts.where((p) => p.category != null).toList();
+      expect(kws.single.text, '改为');
+      expect(kws.single.category, KwCategory.act);
+      expect(parts.first.text, '第12周');
+    });
+
+    test('划句：句子区间按 。！？；换行 切分，标点归前句', () {
+      final s = sentenceRanges('周五机房停电。改为线上自习！');
+      expect(s.length, 2);
+      expect(s[0].start, 0);
+      expect(s[0].end, 7);
+      expect(s[1].start, 7);
+      expect(s[1].end, 14);
+    });
+
+    test('真实通知：楼栋房间号连片 + 党务词高亮', () {
+      // 取班级真实通知原文（第二批入党谈话）
+      final parts =
+          splitKeywords('1.请准时在14:30到达强能楼502   进行第二批入党谈话');
+      final kws = parts.where((p) => p.category != null).toList();
+      expect(kws.map((k) => k.text).toList(), ['强能楼502', '入党谈话']);
+      expect(kws[0].category, KwCategory.bld);
+      expect(kws[1].category, KwCategory.evt);
+
+      final prep = splitKeywords('④请提前准备以下内容')
+          .where((p) => p.category != null)
+          .single;
+      expect(prep.text, '提前');
+      expect(prep.category, KwCategory.act);
+      final role = splitKeywords('③ 党员的基本条件。')
+          .where((p) => p.category != null)
+          .single;
+      expect(role.text, '党员');
+      expect(role.category, KwCategory.role);
+    });
+
+    test('富文本：划句底色与高亮词 span 生成', () {
+      final spans = buildKeywordSpans(
+        '周五机房停电。改为线上自习！',
+        const TextStyle(fontSize: 14),
+        false,
+      );
+      expect(spans.length, 5);
+      expect(spans.whereType<WidgetSpan>().length, 1);
     });
   });
 
