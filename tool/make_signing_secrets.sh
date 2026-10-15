@@ -18,7 +18,8 @@ if [[ ! -f "$KEYSTORE" || ! -f "$PROPS" ]]; then
   exit 1
 fi
 
-OUT="${HOME}/Documents/gdmec/signing-2615"
+# 仓库外备份落点：文稿/Yuki/signing-2615（放这里方便随个人文档一起备份）
+OUT="${HOME}/Documents/Yuki/signing-2615"
 mkdir -p "$OUT"
 
 # 仓库外备份：密钥库丢了就再也无法覆盖升级，务必另存到网盘/U 盘
