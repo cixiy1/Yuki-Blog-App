@@ -21,6 +21,31 @@ class AppRelease {
 
   /// Release 页面（APK 直链不可用时的兜底跳转）。
   final String releaseUrl;
+
+  /// 直接展示用的更新说明：GitHub 自动生成的是 Markdown，去掉符号再显示。
+  String get displayNotes => stripMarkdown(notes);
+}
+
+/// 把 Release 说明里的 Markdown 记号清掉，只留下可读正文。
+///
+/// GitHub 自动生成的说明形如 `**Full Changelog**: https://github.com/…`，
+/// 直接塞进弹窗会带着一堆星号与井号；这里做最小化处理：去强调符、链接只留
+/// 文字、标题去掉井号、无序列表换成圆点，并折叠多余空行。
+String stripMarkdown(String source) {
+  var text = source.replaceAll('\r\n', '\n');
+  text = text.replaceAllMapped(
+    RegExp(r'\[([^\]]*)\]\([^)]*\)'),
+    (m) => m.group(1) ?? '',
+  );
+  text = text.replaceAll(RegExp(r'\*\*|__|`|~~'), '');
+  // 注意用 [^\S\n]（非换行空白）而非 \s：后者会连同前面的空行一起吃进匹配，
+  // 把段落间距压掉。
+  text = text.replaceAllMapped(
+      RegExp(r'^#{1,6}[^\S\n]*', multiLine: true), (_) => '');
+  text = text.replaceAllMapped(
+      RegExp(r'^[^\S\n]*[-*+][^\S\n]+', multiLine: true), (_) => '• ');
+  text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+  return text.trim();
 }
 
 /// 应用内更新检查：比对 GitHub 最新 Release 与当前安装版本。

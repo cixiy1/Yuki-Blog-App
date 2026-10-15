@@ -55,7 +55,7 @@ class _SettingPageState extends State<SettingPage> {
                       )
                     : const Icon(Icons.system_update_alt),
                 title: const Text('检查更新'),
-                subtitle: const Text('从 GitHub Releases 获取最新版本'),
+                subtitle: const Text('从 GitHub Releases 获取最新版本，可应用内下载安装'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _checking ? null : _checkUpdate,
               ),

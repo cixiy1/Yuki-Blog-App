@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import 'package:yuki_blog_app/core/apk_downloader.dart';
 import 'package:yuki_blog_app/core/update_service.dart';
+import 'package:yuki_blog_app/features/update/apk_installer.dart';
+import 'package:yuki_blog_app/features/update/download_progress_dialog.dart';
+import 'package:yuki_blog_app/features/update/release_launcher.dart';
 
-/// 弹出「发现新版本」对话框。
+/// 弹出「发现新版本」对话框，给出两条更新路径。
 ///
 /// - [manual] = true 时用户主动检查，无更新/失败也给出反馈；
 ///   false 时静默检查，仅在有新版本时弹窗。
-/// - 更新动作：跳转浏览器下载 Release 资产里的 APK
-///   （GitHub Actions 构建版），失败兜底打开 Release 页面。
+/// - 「立即更新」：应用内下载（带进度条），完成后直接唤起系统安装器；
+/// - 「浏览器下载」：跳转浏览器自行下载安装（系统限制应用内安装时的出路）。
+/// - [download] / [install] 为实现注入点，默认走真实下载与系统安装器。
 Future<void> showUpdateDialog(
   BuildContext context, {
   required AppRelease? release,
   bool manual = false,
+  ApkDownloadFn? download,
+  ApkInstallFn? install,
 }) async {
   if (release == null) {
     if (manual) {
@@ -23,9 +29,12 @@ Future<void> showUpdateDialog(
     return;
   }
 
+  final notes = release.displayNotes;
+  final hasApk = release.apkUrl.isNotEmpty;
+
   await showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.system_update_alt),
       title: Text('发现新版本 ${release.tagName}'),
       content: SizedBox(
@@ -42,17 +51,21 @@ Future<void> showUpdateDialog(
             Flexible(
               child: SingleChildScrollView(
                 child: Text(
-                  release.notes.isNotEmpty ? release.notes : '常规更新与问题修复。',
+                  notes.isNotEmpty ? notes : '常规更新与问题修复。',
                   style: const TextStyle(fontSize: 13, height: 1.5),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
-              '安装包来自 GitHub Releases，点击「立即更新」在浏览器下载后安装。',
+              hasApk
+                  ? '安装包来自 GitHub Releases：「立即更新」在应用内下载后直接打开系统安装界面，'
+                      '「浏览器下载」则跳到浏览器自行下载安装。'
+                  : '安装包来自 GitHub Releases，点击下方按钮在浏览器中下载后安装。',
               style: TextStyle(
                 fontSize: 11.5,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                height: 1.45,
+                color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -60,25 +73,37 @@ Future<void> showUpdateDialog(
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('稍后再说'),
         ),
-        FilledButton.icon(
-          icon: const Icon(Icons.download, size: 18),
-          label: const Text('立即更新'),
-          onPressed: () => _launchDownload(context, release),
+        TextButton.icon(
+          icon: const Icon(Icons.open_in_browser, size: 18),
+          label: const Text('浏览器下载'),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(dialogContext);
+            Navigator.of(dialogContext).pop();
+            if (!await launchReleaseDownload(release)) {
+              messenger.showSnackBar(
+                const SnackBar(content: Text('无法打开浏览器，请手动访问 GitHub Releases')),
+              );
+            }
+          },
         ),
+        if (hasApk)
+          FilledButton.icon(
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('立即更新'),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              showDownloadProgressDialog(
+                context,
+                release: release,
+                download: download ?? downloadToFile,
+                install: install ?? launchApkInstaller,
+              );
+            },
+          ),
       ],
     ),
   );
-}
-
-Future<void> _launchDownload(BuildContext context, AppRelease release) async {
-  Navigator.of(context).pop();
-  // 优先 APK 直链（浏览器直接下载安装包），失败打开 Release 页面
-  final Uri uri = Uri.tryParse(release.apkUrl) ?? Uri.parse(release.releaseUrl);
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-    await launchUrl(Uri.parse(release.releaseUrl),
-        mode: LaunchMode.externalApplication);
-  }
 }

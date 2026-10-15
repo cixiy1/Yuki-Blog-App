@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 课表数据网络同步必需（release 构建不会自动注入） -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 应用内下载更新包后唤起系统安装器（Android 8+ 的「未知来源」限制） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="Yuki Blog"
         android:name="${applicationName}"

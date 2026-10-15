@@ -36,6 +36,39 @@ void main() {
     });
   });
 
+  group('stripMarkdown 更新说明清洗', () {
+    test('去掉强调符、保留链接文字', () {
+      expect(
+        stripMarkdown(
+            '**Full Changelog**: https://github.com/cixiy1/Yuki-Blog-App/compare/v1.2.0...v1.3.0'),
+        'Full Changelog: https://github.com/cixiy1/Yuki-Blog-App/compare/v1.2.0...v1.3.0',
+      );
+      expect(stripMarkdown('新增 [课程详情](https://a.b/c) 面板'),
+          '新增 课程详情 面板');
+    });
+
+    test('标题去井号、列表转圆点、折叠多余空行', () {
+      expect(
+        stripMarkdown('## 修复\n\n\n- 高亮密度\n- 本周调整\n\n'),
+        '修复\n\n• 高亮密度\n• 本周调整',
+      );
+    });
+
+    test('纯文本原样保留', () {
+      expect(stripMarkdown('常规更新与问题修复。'), '常规更新与问题修复。');
+    });
+
+    test('AppRelease.displayNotes 走同一套清洗', () {
+      const release = AppRelease(
+        tagName: 'v1.3.0',
+        notes: '**注意**：`v1.3.0` 起改为人工标注',
+        apkUrl: '',
+        releaseUrl: '',
+      );
+      expect(release.displayNotes, '注意：v1.3.0 起改为人工标注');
+    });
+  });
+
   group('checkForUpdate 拉取 GitHub Release', () {
     const fakeRelease = '''
 {
