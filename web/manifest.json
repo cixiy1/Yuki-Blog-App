@@ -1,11 +1,11 @@
 {
-    "name": "myclass",
-    "short_name": "myclass",
+    "name": "Yuki Blog",
+    "short_name": "Yuki Blog",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#2196F3",
-    "description": "A new Flutter project.",
+    "description": "The mobile app of Yuki-blog, built for Class 2615.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

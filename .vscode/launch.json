@@ -5,18 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "myclass",
+            "name": "Yuki Blog",
             "request": "launch",
             "type": "dart"
         },
         {
-            "name": "myclass (profile mode)",
+            "name": "Yuki Blog (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile"
         },
         {
-            "name": "myclass (release mode)",
+            "name": "Yuki Blog (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"
