@@ -216,6 +216,125 @@ List<({int start, int end})> sentenceRanges(String content) {
 }
 
 // ---------------------------------------------------------------------------
+// 人工标注：读懂内容后手动标出「哪一段值得看」
+// ---------------------------------------------------------------------------
+//
+// 纯算法回答不了「这条要不要我现在处理」——它只会认词形和锚点。
+// 所以正式数据里由人（写数据的人）读一遍，把值得看的片段用成对括号标出来：
+//
+//   {{...}}  必看（core）—— 时间、地点、必须办的事
+//   [[...]]  关注（key）—— 相关但不必马上处理
+//   ((...))  一般（plain）—— 显式压档：讲工具本身、读者不必处理的内容
+//
+// 标记直接内联在正文里，因此改文字时标记跟着文字走，不像字符下标那样一改就错位。
+// 渲染前会整段剥离，不会显示出来。
+//
+// 与算法的分工：
+//   · 档位（必看 / 关注 / 一般）—— 只要正文里出现过标注，这一整段就视为
+//     「已人工审阅」，全部以标注为准（没标的句子就是一般），算法不参与；
+//     整段一个标注都没有时才回退到 [analyseSentences] 兜底（未审阅内容）。
+//   · 配色（角色 / 楼宇 / 科目 / 事项 / 动作 / 负面）—— 始终由 [kwMap] 词表决定。
+// 这样「人工判断重要性」与「固定词表给颜色」各司其职，互不打架。
+
+/// 一段人工标注区间（下标基于剥离标记后的正文）。
+class MarkSpan {
+  const MarkSpan(this.start, this.end, this.tier);
+
+  final int start;
+  final int end;
+  final ImportanceTier tier;
+}
+
+/// 剥离标注后的正文 + 标注区间。
+class AnnotatedText {
+  const AnnotatedText(this.text, this.marks);
+
+  /// 剥掉标记的纯正文（渲染与算法都基于它）。
+  final String text;
+
+  /// 标注区间，按下标升序。
+  final List<MarkSpan> marks;
+
+  /// 这段文字是否被人工标注过。有标注时算法不再插手定档。
+  bool get isAnnotated => marks.isNotEmpty;
+}
+
+const String _markOpenCore = '{{';
+const String _markCloseCore = '}}';
+const String _markOpenKey = '[[';
+const String _markCloseKey = ']]';
+const String _markOpenPlain = '((';
+const String _markClosePlain = '))';
+
+/// 解析内联标注：双花括号=必看，双方括号=关注，双圆括号=一般（显式压档）。
+///
+/// 括号不成对时按普通文字处理（宁可少标一处，不可悄悄吞掉原文）。
+AnnotatedText parseAnnotations(String raw) {
+  if (!raw.contains('{') && !raw.contains('[') && !raw.contains('((')) {
+    return AnnotatedText(raw, const <MarkSpan>[]);
+  }
+  final buf = StringBuffer();
+  final marks = <MarkSpan>[];
+  var i = 0;
+  while (i < raw.length) {
+    final open2 = i + 1 < raw.length ? raw.substring(i, i + 2) : '';
+    final String? close;
+    final ImportanceTier tier;
+    if (open2 == _markOpenCore) {
+      close = _markCloseCore;
+      tier = ImportanceTier.core;
+    } else if (open2 == _markOpenKey) {
+      close = _markCloseKey;
+      tier = ImportanceTier.key;
+    } else if (open2 == _markOpenPlain) {
+      close = _markClosePlain;
+      tier = ImportanceTier.plain;
+    } else {
+      close = null;
+      tier = ImportanceTier.plain;
+    }
+    if (close != null) {
+      final end = raw.indexOf(close, i + 2);
+      if (end > i + 2) {
+        final seg = raw.substring(i + 2, end);
+        final start = buf.length;
+        buf.write(seg);
+        marks.add(MarkSpan(start, start + seg.length, tier));
+        i = end + 2;
+        continue;
+      }
+    }
+    buf.write(raw[i]);
+    i++;
+  }
+  return AnnotatedText(buf.toString(), marks);
+}
+
+/// 某一句的档位。
+///
+/// [annotated] 为整段是否有标注：有则只认标注（没标的句子就是「一般」，
+/// 不让算法猜回来），无则回退到语义评分。
+ImportanceTier sentenceTierOf(
+  String clean,
+  int ss,
+  int se,
+  List<MarkSpan> marks,
+  List<KwRange> ranges, {
+  required bool annotated,
+}) {
+  if (annotated) {
+    var hasKey = false;
+    for (final m in marks) {
+      if (m.start >= se || m.end <= ss) continue;
+      if (m.tier == ImportanceTier.core) return ImportanceTier.core;
+      if (m.tier == ImportanceTier.key) hasKey = true;
+    }
+    return hasKey ? ImportanceTier.key : ImportanceTier.plain;
+  }
+  return analyseSentence(clean, ss, se, ranges: ranges).tier;
+}
+
+// ---------------------------------------------------------------------------
 // 语义重点度：读懂一句话再判断它值不值得看
 // ---------------------------------------------------------------------------
 //
@@ -444,19 +563,21 @@ List<SentenceInfo> analyseSentences(String content, {List<KwRange>? ranges}) {
 }
 
 /// 把文本切成「普通文本 + 关键词片段」序列，供富文本渲染。
-/// 切分基于 [highlightRanges]（含连片），与渲染端行为一致。
+/// 切分基于 [highlightRanges]（含连片），与渲染端行为一致；
+/// 内联标注会被剥离（标注只影响定档，不影响分词）。
 List<({String text, KwCategory? category})> splitKeywords(String content) {
+  final clean = parseAnnotations(content).text;
   final result = <({String text, KwCategory? category})>[];
   var last = 0;
-  for (final r in highlightRanges(content)) {
+  for (final r in highlightRanges(clean)) {
     if (r.start > last) {
-      result.add((text: content.substring(last, r.start), category: null));
+      result.add((text: clean.substring(last, r.start), category: null));
     }
-    result.add((text: content.substring(r.start, r.end), category: r.category));
+    result.add((text: clean.substring(r.start, r.end), category: r.category));
     last = r.end;
   }
-  if (last < content.length) {
-    result.add((text: content.substring(last), category: null));
+  if (last < clean.length) {
+    result.add((text: clean.substring(last), category: null));
   }
   return result;
 }
@@ -629,11 +750,12 @@ WidgetSpan _coreMarker(bool isDark) => WidgetSpan(
       ),
     );
 
-/// 按句子 + 关键词切分并生成富文本 span。
+/// 按「人工标注 + 句子 + 关键词」三层切分并生成富文本 span。
 ///
-/// [baseStyle] 为普通文本样式。四层结构：
-/// 1. 划句定档：逐句算重点度，「必看」句浓荧光底 + 加粗 + 句首竖条，
-///    「关注」句淡荧光底，「一般」句不上底（只保留词上色）；
+/// [baseStyle] 为普通文本样式。三层结构，各司其职：
+/// 1. 定档（必看 / 关注 / 一般）：有内联标注就以标注为准，标注的片段加粗、
+///    所在句铺荧光底（必看更浓且带句首竖条）；整段无标注时回退到语义评分，
+///    由算法定档（必看句整句加粗）；
 /// 2. 划词：关键词按 6 类视觉规格着色（浅底 / 描边 / 划线叠加），
 ///    并与相邻的楼栋、房间号、周次、时间连成一片；
 /// 3. 划线：高亮词本身叠加同色划线（波浪 / 直线 / 虚线）。
@@ -643,48 +765,70 @@ List<InlineSpan> buildKeywordSpans(
   bool isDark,
 ) {
   if (content.isEmpty) return const <InlineSpan>[];
-  final ranges = highlightRanges(content);
-  final sentences = analyseSentences(content, ranges: ranges);
+  final ann = parseAnnotations(content);
+  final text = ann.text;
+  if (text.isEmpty) return const <InlineSpan>[];
+  final ranges = highlightRanges(text);
 
   final spans = <InlineSpan>[];
-  for (final info in sentences) {
-    final bg = sentenceBgOf(info.tier, isDark);
+  for (final s in sentenceRanges(text)) {
+    final tier = sentenceTierOf(
+      text,
+      s.start,
+      s.end,
+      ann.marks,
+      ranges,
+      annotated: ann.isAnnotated,
+    );
+    final bg = sentenceBgOf(tier, isDark);
+    // 算法定的必看句整句加粗；人工标注的只加粗标注的那几段。
+    final boldWhole = !ann.isAnnotated && tier == ImportanceTier.core;
+    if (tier == ImportanceTier.core) spans.add(_coreMarker(isDark));
+
     final hits = ranges
-        .where((r) => r.start < info.end && r.end > info.start)
+        .where((r) => r.start < s.end && r.end > s.start)
         .toList();
-    if (info.tier == ImportanceTier.core) {
-      spans.add(_coreMarker(isDark));
-    }
-    var pos = info.start;
+    final mhits = ann.marks
+        .where((m) => m.start < s.end && m.end > s.start)
+        .toList();
+
+    // 词区间与标注区间的边界一起切，使两层的边界都能落准。
+    final cuts = <int>{s.start, s.end};
     for (final r in hits) {
-      final s = r.start < pos ? pos : r.start;
-      final e = r.end > info.end ? info.end : r.end;
-      if (s > pos) {
+      cuts.add(r.start < s.start ? s.start : (r.start > s.end ? s.end : r.start));
+      cuts.add(r.end < s.start ? s.start : (r.end > s.end ? s.end : r.end));
+    }
+    for (final m in mhits) {
+      cuts.add(m.start < s.start ? s.start : (m.start > s.end ? s.end : m.start));
+      cuts.add(m.end < s.start ? s.start : (m.end > s.end ? s.end : m.end));
+    }
+    final points = cuts.toList()..sort();
+
+    for (var i = 0; i + 1 < points.length; i++) {
+      final a = points[i];
+      final b = points[i + 1];
+      if (b <= a) continue;
+      KwRange? hit;
+      for (final r in hits) {
+        if (r.start < b && r.end > a) {
+          hit = r;
+          break;
+        }
+      }
+      // 只有「必看 / 关注」标注才加粗；「一般」标注是显式压档，不加粗。
+      final marked = mhits.any((m) =>
+          m.start < b && m.end > a && m.tier != ImportanceTier.plain);
+      final seg = text.substring(a, b);
+      if (hit != null) {
+        spans.add(_kwSpan(seg, hit.category, baseStyle, isDark, bg));
+      } else {
         spans.add(_plainSpan(
-          content.substring(pos, s),
+          seg,
           baseStyle,
           bg,
-          emphasis: info.tier == ImportanceTier.core,
+          emphasis: marked || boldWhole,
         ));
       }
-      spans.add(
-        _kwSpan(
-          content.substring(s, e),
-          r.category,
-          baseStyle,
-          isDark,
-          bg,
-        ),
-      );
-      pos = e;
-    }
-    if (pos < info.end) {
-      spans.add(_plainSpan(
-        content.substring(pos, info.end),
-        baseStyle,
-        bg,
-        emphasis: info.tier == ImportanceTier.core,
-      ));
     }
   }
   return spans;

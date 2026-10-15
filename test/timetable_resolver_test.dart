@@ -97,6 +97,125 @@ void main() {
     });
   });
 
+  group('人工标注：读懂内容后手动标重点', () {
+    List<ImportanceTier> tiersOf(String raw, {bool? annotated}) {
+      final ann = parseAnnotations(raw);
+      final rs = highlightRanges(ann.text);
+      return [
+        for (final s in sentenceRanges(ann.text))
+          if (ann.text.substring(s.start, s.end).trim().isNotEmpty)
+            sentenceTierOf(ann.text, s.start, s.end, ann.marks, rs,
+                annotated: annotated ?? ann.isAnnotated),
+      ];
+    }
+
+    test('解析三种标注并剥离标记；不成对括号按原文保留', () {
+      final a = parseAnnotations('{{必看段}}与[[关注段]]与((一般段))');
+      expect(a.text, '必看段与关注段与一般段');
+      expect(a.isAnnotated, isTrue);
+      expect(a.marks.length, 3);
+      expect(a.marks[0].tier, ImportanceTier.core);
+      expect(a.marks[1].tier, ImportanceTier.key);
+      expect(a.marks[2].tier, ImportanceTier.plain);
+      // 区间下标基于剥离后的正文
+      expect(a.text.substring(a.marks[1].start, a.marks[1].end), '关注段');
+
+      final b = parseAnnotations('漏写收尾 {{没闭合');
+      expect(b.text, '漏写收尾 {{没闭合');
+      expect(b.marks, isEmpty);
+      expect(b.isAnnotated, isFalse);
+    });
+
+    test('整段有标注 → 未标注的句子判为一般，算法不接手', () {
+      const raw = '{{10月15日开始}}办体测。\n'
+          '本句含10月20日与强能楼502。';
+      expect(tiersOf(raw), [ImportanceTier.core, ImportanceTier.plain]);
+
+      // 同一段不标注时，算法会把第二句判成必看（时空锚点齐全）
+      const noMark = '10月15日开始办体测。\n本句含10月20日与强能楼502。';
+      expect(analyseSentences(noMark).last.tier, ImportanceTier.core);
+    });
+
+    test('(( )) 显式压档：整条判为一般，算法不接手', () {
+      const raw = '((7-8节标签由「第七节」改为「七八节」（第八节存在）))';
+      expect(tiersOf(raw), [ImportanceTier.plain]);
+      // 不标注时算法因「改为」判成关注
+      expect(
+        analyseSentences('7-8节标签由「第七节」改为「七八节」（第八节存在）').single.tier,
+        ImportanceTier.key,
+      );
+    });
+
+    test('无标注文本仍回退算法兜底', () {
+      const t = '本句含10月20日与强能楼502。';
+      final ann = parseAnnotations(t);
+      expect(ann.isAnnotated, isFalse);
+      expect(tiersOf(t), [ImportanceTier.core]);
+    });
+
+    test('渲染：只给标注片段加粗，(()) 压档条目不铺底色', () {
+      final spans = buildKeywordSpans(
+        '请在{{明天上午九点}}到教室。',
+        const TextStyle(fontSize: 14),
+        false,
+      );
+      // 必看句：句首竖条
+      expect(spans.first, isA<WidgetSpan>());
+      // 只有被标注的片段加粗
+      final bolds = spans
+          .whereType<TextSpan>()
+          .where((s) => s.style?.fontWeight == FontWeight.w600)
+          .map((s) => s.text)
+          .toList();
+      expect(bolds, ['明天上午九点']);
+
+      final flat = buildKeywordSpans(
+        '((新增「数据更新历」面板与「最近更新于」标识))',
+        const TextStyle(fontSize: 14),
+        false,
+      );
+      expect(flat.whereType<WidgetSpan>(), isEmpty);
+      for (final s in flat) {
+        expect(s.style?.background, isNull);
+      }
+    });
+
+    test('真实数据：压档条目全为一般、通知首句必看、有标注条目不漏判', () {
+      for (final e in data.meta.changelog) {
+        final ann = parseAnnotations(e.content);
+        if (ann.marks.any((m) => m.tier == ImportanceTier.plain)) {
+          expect(
+            tiersOf(e.content).every((t) => t == ImportanceTier.plain),
+            isTrue,
+            reason: e.content,
+          );
+        }
+      }
+
+      for (final n in data.notices) {
+        expect(tiersOf(n.text).first, ImportanceTier.core, reason: n.title);
+      }
+
+      var annotated = 0;
+      for (final e in data.meta.changelog) {
+        final ann = parseAnnotations(e.content);
+        if (!ann.isAnnotated) continue;
+        annotated++;
+        final rs = highlightRanges(ann.text);
+        for (final s in sentenceRanges(ann.text)) {
+          final covered =
+              ann.marks.any((m) => m.start < s.end && m.end > s.start);
+          final t = sentenceTierOf(ann.text, s.start, s.end, ann.marks, rs,
+              annotated: true);
+          if (!covered) {
+            expect(t, ImportanceTier.plain, reason: e.content);
+          }
+        }
+      }
+      expect(annotated, greaterThan(30));
+    });
+  });
+
   group('语义重点度分档', () {
     test('时空锚点句 → 必看；纯明细罗列 → 一般', () {
       const t = '北校区2026级全体学生于10月15日–24日期间参加体质健康测试，'
