@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myclass/app/theme.dart';
-import 'package:myclass/core/asset_timetable_repository.dart';
+import 'package:myclass/core/network_timetable_repository.dart';
 import 'package:myclass/core/timetable_repository.dart';
 import 'package:myclass/core/timetable_resolver.dart';
 import 'package:myclass/models/timetable.dart';
@@ -13,15 +13,16 @@ import 'package:myclass/features/schedule/widgets/week_changes_panel.dart';
 
 /// 动态课程表页。
 ///
-/// 数据通过 [TimetableRepository] 接口获取（默认本地 asset），
+/// 数据通过 [TimetableRepository] 接口获取（默认网络同步源：
+/// 优先拉取博客线上最新课表，离线自动回退本地 asset），
 /// UI 只消费解析后的网格数据；换数据源不用改这个页面。
 class SchedulePage extends StatefulWidget {
   const SchedulePage({
     super.key,
-    this.repository = const AssetTimetableRepository(),
+    this.repository,
   });
 
-  final TimetableRepository repository;
+  final TimetableRepository? repository;
 
   @override
   State<SchedulePage> createState() => _SchedulePageState();
@@ -29,17 +30,28 @@ class SchedulePage extends StatefulWidget {
 
 class _SchedulePageState extends State<SchedulePage> {
   late Future<TimetableData> _future;
+  SyncTimetableRepository? _ownedRepository;
+
+  /// 未注入数据源时创建默认网络同步源，随页面销毁释放底层连接。
+  TimetableRepository get _effectiveRepository =>
+      widget.repository ?? (_ownedRepository ??= SyncTimetableRepository());
 
   @override
   void initState() {
     super.initState();
-    _future = widget.repository.loadTimetable();
+    _future = _effectiveRepository.loadTimetable();
   }
 
   void _retry() {
     setState(() {
-      _future = widget.repository.loadTimetable();
+      _future = _effectiveRepository.loadTimetable();
     });
+  }
+
+  @override
+  void dispose() {
+    _ownedRepository?.dispose();
+    super.dispose();
   }
 
   @override
