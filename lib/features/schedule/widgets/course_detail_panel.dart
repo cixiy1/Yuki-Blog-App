@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:yuki_blog_app/app/theme.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/keyword_highlight.dart';
 
 /// 课程详情面板：点击格子后展开，再点同格或按 × 收起。
+///
+/// 底部的调整说明是「一段话」级别的长内容，同样走高亮——只做词表着色
+/// （课程名 / 地点 / 动作按类别上色加划线），不铺底纹也不按档位加粗，
+/// 与「本周调整」面板同一口径：这里是运行时拼出来的说明，不是可标注的原文。
 class CourseDetailPanel extends StatelessWidget {
   const CourseDetailPanel({
     super.key,
@@ -16,6 +21,7 @@ class CourseDetailPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final infoRows = <({IconData icon, String label, String value})>[
       if (entry.teacher.isNotEmpty)
@@ -117,12 +123,18 @@ class CourseDetailPanel extends StatelessWidget {
                           style: TextStyle(
                               fontSize: 12.5, color: scheme.onSurfaceVariant)),
                       Expanded(
-                        child: Text(
-                          note,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            height: 1.45,
-                            color: scheme.onSurfaceVariant,
+                        child: Text.rich(
+                          TextSpan(
+                            children: buildKeywordSpans(
+                              note,
+                              TextStyle(
+                                fontSize: 12.5,
+                                height: 1.45,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              isDark,
+                              tiered: false,
+                            ),
                           ),
                         ),
                       ),

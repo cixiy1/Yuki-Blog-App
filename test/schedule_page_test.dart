@@ -10,6 +10,7 @@ import 'package:yuki_blog_app/core/network_timetable_repository.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
 import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/course_detail_panel.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 
 void main() {
@@ -131,6 +132,46 @@ void main() {
     await tester.tap(firstCell);
     await tester.pumpAndSettle();
     expect(find.text('教师'), findsNothing);
+  });
+
+  testWidgets('课程详情的调整说明走高亮：只有词表着色，不铺句子底纹', (tester) async {
+    await pumpTall(tester, wrapApp());
+
+    // 第一个格子 = 周一 1-2 习概（本周带「换地点」长期说明）
+    final firstCell = find.byType(CourseCell).first;
+    await tester.ensureVisible(firstCell);
+    await tester.tap(firstCell);
+    await tester.pumpAndSettle();
+
+    final panel = find.byType(CourseDetailPanel);
+    expect(panel, findsOneWidget);
+
+    // visitChildren 自身会递归（并在 text 非空时先访问自身），回调里不要再递归
+    final spans = <TextSpan>[];
+    bool visit(InlineSpan s) {
+      if (s is TextSpan) spans.add(s);
+      return true;
+    }
+
+    for (final rt in tester.widgetList<RichText>(
+      find.descendant(of: panel, matching: find.byType(RichText)),
+    )) {
+      rt.text.visitChildren(visit);
+    }
+
+    expect(spans, isNotEmpty);
+    // 长说明被词表着色：出现带同色划线的高亮词
+    expect(
+      spans.any((s) => s.style?.decoration != null && s.style?.color != null),
+      isTrue,
+      reason: '详情里的长说明应走高亮（词表着色）',
+    );
+    // 只着色：整块详情不铺任何句子底纹、不按档位加粗
+    expect(spans.every((s) => s.style?.background == null), isTrue);
+    expect(
+      spans.every((s) => s.style?.fontWeight != FontWeight.w600),
+      isTrue,
+    );
   });
 
   testWidgets('下一周后出现「回到本周」，且可跳回', (tester) async {
