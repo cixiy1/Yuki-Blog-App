@@ -8,3 +8,5 @@
 - **Git 日志维护**：每个实质性开发节点（新功能 / 修复 / 重构 / 改名）都要及时单独提交，用 Conventional Commits 规范（feat/fix/docs/chore...），不要攒一堆改动混成一个提交；完成即推送 GitHub（cixiy1/Yuki-Blog-App）。
 - **双端同步点（改一处必须改两处）**：① 关键词词表 App `lib/features/schedule/widgets/keyword_highlight.dart` 的 `kwMap` ↔ 博客 `src/components/widget/ClassSchedule.astro` 的 `TT_KW_MAP`；② 高亮/重点度算法 `highlightRanges + analyseSentence + buildKeywordSpans` ↔ `ttKwRanges + ttSentenceTier + hlLog`；③ 更新历与通知面板的布局顺序。改完用「抽 astro 函数到 node 跑用例」的方式对齐行为。
 - **文字高亮的定位**：不是「命中词表就上色」，而是读懂内容判重点度——按时空锚点 / 行动锚点 / 影响锚点打分，模板块（讲工具本身而非班级事务）降权，分必看 / 关注 / 一般三档。新增词或改算法时保持这个取向，别退回纯词形匹配。
+- **公开仓库安全**：`cixiy1/Yuki-Blog-App` 是公开仓库，班级事务个人材料（`/材料/`，如入党谈话内容）已加入 `.gitignore`，不得提交；新增此类本地材料时先确认被忽略，避免 `git add -A` 误推。
+- **本机网络坑**：`github.com:443` 的 TLS 常被拦（`SSL_ERROR_SYSCALL`，TCP 通但握手失败），`api.github.com` 稳定；推送失败时不要反复重试，先用 `api.github.com` 完成其余验证，等网络恢复再推。`flutter test` 需 `env -u HTTP_PROXY ...` 绕过代理（否则 flutter_tester 本地 WebSocket 被代理劫持）。
