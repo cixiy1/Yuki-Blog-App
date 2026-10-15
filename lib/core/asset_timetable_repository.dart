@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:myclass/core/timetable_repository.dart';
-import 'package:myclass/models/timetable.dart';
+import 'package:yuki_blog_app/core/timetable_repository.dart';
+import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 本地资源数据源：读取打包进 App 的 `assets/data/schedule-2615.json`。
 ///

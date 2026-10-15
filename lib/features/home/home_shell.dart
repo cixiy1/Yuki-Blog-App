@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:myclass/features/home/widgets/nav_view.dart';
+import 'package:yuki_blog_app/features/home/widgets/nav_view.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.child});

@@ -1,4 +1,4 @@
-import 'package:myclass/models/timetable.dart';
+import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 动态课表数据源接口。
 ///

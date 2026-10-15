@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/app/theme.dart';
-import 'package:myclass/core/timetable_resolver.dart';
-import 'package:myclass/features/schedule/widgets/course_cell.dart';
-import 'package:myclass/features/schedule/widgets/schedule_palette.dart';
+import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 const _weekdayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 

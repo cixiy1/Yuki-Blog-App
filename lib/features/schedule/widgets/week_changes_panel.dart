@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/app/theme.dart';
-import 'package:myclass/core/timetable_resolver.dart';
-import 'package:myclass/features/schedule/widgets/schedule_palette.dart';
+import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 /// 「本周调整」面板：换教室 / 停课 / 调课 / 新增 / 对调 / 提示 / 实践周。
 ///

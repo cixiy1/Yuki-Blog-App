@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/core/timetable_resolver.dart';
-import 'package:myclass/features/schedule/widgets/schedule_palette.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 /// 图例：状态色块说明。
 class TimetableLegend extends StatelessWidget {

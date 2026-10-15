@@ -1,4 +1,4 @@
-import 'package:myclass/models/timetable.dart';
+import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 格子状态。
 enum CellStatus {

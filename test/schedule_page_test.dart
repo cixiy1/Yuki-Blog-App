@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myclass/core/asset_timetable_repository.dart';
-import 'package:myclass/core/timetable_resolver.dart';
-import 'package:myclass/features/schedule/schedule_page.dart';
-import 'package:myclass/features/schedule/widgets/course_cell.dart';
-import 'package:myclass/models/timetable.dart';
+import 'package:yuki_blog_app/core/asset_timetable_repository.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
+import 'package:yuki_blog_app/models/timetable.dart';
 
 void main() {
   final data = TimetableData.fromRawJson(

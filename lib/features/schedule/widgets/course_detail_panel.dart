@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/app/theme.dart';
-import 'package:myclass/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
 
 /// 课程详情面板：点击格子后展开，再点同格或按 × 收起。
 class CourseDetailPanel extends StatelessWidget {

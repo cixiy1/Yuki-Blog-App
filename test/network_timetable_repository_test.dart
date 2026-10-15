@@ -4,7 +4,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myclass/core/network_timetable_repository.dart';
+import 'package:yuki_blog_app/core/network_timetable_repository.dart';
 
 /// 真实线上数据（与 assets/data/schedule-2615.json 同源），用于断言解析。
 late final String _validJson;

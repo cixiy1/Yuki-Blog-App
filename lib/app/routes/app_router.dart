@@ -1,10 +1,10 @@
 import 'package:go_router/go_router.dart';
-import 'package:myclass/features/home/home_shell.dart';
-import 'package:myclass/app/routes/route_paths.dart';
+import 'package:yuki_blog_app/features/home/home_shell.dart';
+import 'package:yuki_blog_app/app/routes/route_paths.dart';
 
-import 'package:myclass/features/schedule/schedule_page.dart';
-import 'package:myclass/features/todo/todo_page.dart';
-import 'package:myclass/features/setting/setting_page.dart';
+import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
+import 'package:yuki_blog_app/features/todo/todo_page.dart';
+import 'package:yuki_blog_app/features/setting/setting_page.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: RoutePaths.home,

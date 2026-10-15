@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
 
 /// 课表界面共用的配色与尺寸。
 ///

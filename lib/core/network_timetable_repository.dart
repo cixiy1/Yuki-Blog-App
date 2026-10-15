@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
-import 'package:myclass/core/asset_timetable_repository.dart';
-import 'package:myclass/core/timetable_repository.dart';
-import 'package:myclass/models/timetable.dart';
+import 'package:yuki_blog_app/core/asset_timetable_repository.dart';
+import 'package:yuki_blog_app/core/timetable_repository.dart';
+import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 网络数据源：自动下载同步博客线上仓库的课表 JSON。
 ///

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/app/theme.dart';
-import 'package:myclass/core/timetable_resolver.dart';
-import 'package:myclass/features/schedule/widgets/schedule_palette.dart';
+import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 /// 课程格子：短名 + 角标 + 教室 + 教师。
 ///

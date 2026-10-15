@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/app/theme.dart';
+import 'package:yuki_blog_app/app/theme.dart';
 
 /// 周次工具条：上一周 / 周次选择 / 下一周 + 「回到本周」。
 ///

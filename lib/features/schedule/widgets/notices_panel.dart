@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:myclass/app/theme.dart';
-import 'package:myclass/models/timetable.dart';
+import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/models/timetable.dart';
 
 /// 通知面板：与课表网格解耦，数据驱动。
 ///
