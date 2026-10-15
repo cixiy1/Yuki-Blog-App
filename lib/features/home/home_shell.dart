@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:yuki_blog_app/core/update_service.dart';
 import 'package:yuki_blog_app/features/home/widgets/nav_view.dart';
+import 'package:yuki_blog_app/features/update/update_dialog.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.child});
@@ -40,6 +42,31 @@ class _HomeShellState extends State<HomeShell> {
     userName: "雪穗",
     userDesc: "yuki@example.com",
   );
+
+  UpdateService? _updateService;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUpdateSilently();
+  }
+
+  /// 启动时静默检查更新，仅在有新版本时弹窗。
+  Future<void> _checkUpdateSilently() async {
+    final service = _updateService ??= UpdateService();
+    final release = await service.checkForUpdate();
+    if (!mounted || release == null) return;
+    // 等首帧渲染完成再弹，避免与路由转场抢焦点
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) showUpdateDialog(context, release: release);
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateService?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
