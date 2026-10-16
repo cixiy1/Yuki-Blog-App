@@ -40,7 +40,7 @@ class _HomeShellState extends State<HomeShell> {
   final NavUserInfo _userInfo = const NavUserInfo(
     avatarUrl: "assets/icons/app_icon.png",
     userName: "雪穗",
-    userDesc: "yuki@example.com",
+    userDesc: "天涯何处无芳草",
   );
 
   UpdateService? _updateService;
