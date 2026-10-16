@@ -52,7 +52,7 @@ class _HomeShellState extends State<HomeShell> {
     for (final item in menuItems) {
       if (path.startsWith(item.path)) return item.label;
     }
-    return 'Yuki Blog';
+    return '';
   }
 
   @override
