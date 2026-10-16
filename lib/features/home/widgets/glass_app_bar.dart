@@ -7,13 +7,17 @@ import 'package:flutter/services.dart';
 
 /// iOS 风格「光感沉浸」标题栏（[glassAppBar]）。
 ///
-/// 三段式观感，全部由滚动进度 [progress]（0 = 顶部，1 = 完全折叠）驱动：
+/// 观感（无边框、逐渐模糊）：
 ///
 /// 1. **沉浸**：顶部时背景近乎全透明，页面内容穿透到标题栏与状态栏之下；
-/// 2. **光感**：随滚动渐显高斯模糊（毛玻璃材质）+ 顶部环境光渐层 +
-///    底部发丝高光线，模拟 iOS 导航栏的 Liquid Glass 光泽；
-/// 3. **标题**：大字标题（30px）淡出上移，小字标题（20px）淡入到工具栏行，
+/// 2. **逐渐模糊**：滚过阈值后 180ms 内渐显高斯模糊（毛玻璃材质）与材质
+///    底色，叠一层顶部环境光 —— **全程没有任何线条 / 边框**；
+/// 3. **标题**：大字标题（30px）淡出上移，小字（20px）淡入工具栏行，
 ///    对应 iOS large title → inline title 的折叠动画。
+///
+/// 性能：模糊**不跟手**。BackdropFilter 每帧 readback 在真机上很卡，
+/// 所以滚动进度先量化为 0/1 两档（见 [_quantize]），模糊由一次 180ms
+/// 渐变动画完成，整个滚动过程最多触发十几次模糊重算。
 ///
 /// 用法（配合 [ScrollNotification] 把页面滚动进度喂进来）：
 /// ```dart
@@ -35,133 +39,126 @@ class GlassAppBarLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
-    final t = progress.clamp(0.0, 1.0);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
 
-    // 毛玻璃模糊：0 → 20（iOS 系统材质量级），缓出让前段更"透"
-    final sigma = ui.lerpDouble(0, 20, Curves.easeOut.transform(t))!;
-    // 底色不透明度：约 0 → 0.82（滚动后才"实"，保证文字可读）
-    final bgAlpha = ui.lerpDouble(0.03, 0.82, t)!;
-    // 底部发丝线：常驻但很淡，滚动后变实
-    final lineAlpha = (0.25 + 0.65 * t).clamp(0.0, 1.0);
+    // 目标量化：只有「贴顶（0）」与「滚过阈值（1）」两态。
+    // 模糊**不跟手**（不随滚动每帧连续变化），而是由 TweenAnimationBuilder
+    // 在 180ms 内渐变过去 —— BackdropFilter 的每帧 readback 是真机卡顿
+    // 的元凶，只让它动个位数的帧次。
+    final target = progress >= _kGlassQuantize ? 1.0 : 0.0;
 
-    final titleStyle = TextStyle(
-      color: scheme.onSurface,
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.2,
-    );
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: target),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      builder: (context, t, _) {
+        // 毛玻璃模糊：0 → 16（iOS 系统材质量级）
+        final sigma = ui.lerpDouble(0, 16, t)!;
+        // 底色不透明度：约 0 → 0.80（滚动后才"实"，保证文字可读）
+        final bgAlpha = ui.lerpDouble(0.02, 0.80, t)!;
 
-    // 工具栏行（状态栏之下、kToolbarHeight 高）内左对齐的标题文字，
-    // 避开 AppBar leading 菜单按钮（宽 48）。
-    Widget titleAt(double fontSize, double opacity, double dy, Key key) {
-      return Positioned(
-        left: 48,
-        right: 16,
-        top: top,
-        height: kToolbarHeight,
-        child: IgnorePointer(
-          child: Opacity(
-            opacity: opacity,
-            child: Transform.translate(
-              offset: Offset(0, dy),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  title,
-                  key: key,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: titleStyle.copyWith(fontSize: fontSize),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+        final titleStyle = TextStyle(
+          color: scheme.onSurface,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        );
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // ① 毛玻璃：模糊穿透到标题栏之下的页面内容
-        if (sigma > 0.01)
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: const SizedBox.expand(),
-            ),
-          ),
-
-        // ② 材质底色：顶部略透、底部渐实，滚动过程中整体浮现
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  scheme.surface.withValues(alpha: bgAlpha * 0.88),
-                  scheme.surface.withValues(alpha: bgAlpha),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // ③ 顶部环境光：像光从状态栏上方洒下来（"光感"的来源）
-        Positioned.fill(
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withValues(alpha: isDark ? 0.09 : 0.34),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        // ④ 底部发丝高光线：中段亮、两端渐隐
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 1,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    Colors.white.withValues(
-                      alpha: (isDark ? 0.22 : 0.85) * lineAlpha,
+        // 工具栏行（状态栏之下、kToolbarHeight 高）内左对齐的标题文字，
+        // 避开 AppBar leading 菜单按钮（宽 48）。
+        Widget titleAt(double fontSize, double opacity, double dy, Key key) {
+          return Positioned(
+            left: 48,
+            right: 16,
+            top: top,
+            height: kToolbarHeight,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: opacity,
+                child: Transform.translate(
+                  offset: Offset(0, dy),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      key: key,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle.copyWith(fontSize: fontSize),
                     ),
-                    Colors.transparent,
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        }
 
-        // ⑥ 大字标题：iOS large title 态，随滚动淡出上移
-        titleAt(30, 1 - t, 12 * t, const Key('glass-large-title')),
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ① 毛玻璃：模糊穿透到标题栏之下的页面内容
+            if (sigma > 0.01)
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: const SizedBox.expand(),
+                ),
+              ),
 
-        // ⑦ 小字标题：inline 态，随滚动淡入
-        titleAt(20, t, 6 * (1 - t), const Key('glass-inline-title')),
-      ],
+            // ② 材质底色：顶部略透、底部渐实，滚动过程中整体浮现
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      scheme.surface.withValues(alpha: bgAlpha * 0.88),
+                      scheme.surface.withValues(alpha: bgAlpha),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ③ 顶部环境光：像光从状态栏上方洒下来（"光感"的来源）。
+            // 只是柔光渐层、没有线条，不构成边框。
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.white.withValues(
+                          alpha: (isDark ? 0.07 : 0.22) * t,
+                        ),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ⑥ 大字标题：iOS large title 态，随滚动淡出上移
+            titleAt(30, 1 - t, 12 * t, const Key('glass-large-title')),
+
+            // ⑦ 小字标题：inline 态，随滚动淡入
+            titleAt(20, t, 6 * (1 - t), const Key('glass-inline-title')),
+          ],
+        );
+      },
     );
   }
 }
 
 /// 大字 → 小字的折叠距离（像素），与 iOS large title 的折叠手感对齐。
 const double kGlassCollapseRange = 72;
+
+/// 滚动进度量化阈值：超过一半折叠距离即算「滚过了」。
+const double _kGlassQuantize = 0.5;
 
 /// 组装「光感沉浸」标题栏。
 ///

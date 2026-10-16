@@ -46,8 +46,8 @@ class _HomeShellState extends State<HomeShell> {
 
   UpdateService? _updateService;
 
-  /// 页面滚动进度（0 = 顶部，1 = 折叠完成），喂给「光感沉浸」标题栏。
-  /// 用 ValueNotifier 而非 setState：滚动每帧只重建标题栏，不动整棵树。
+  /// 页面滚动折叠状态（0 = 贴顶，1 = 滚过阈值），喂给「光感沉浸」标题栏。
+  /// 用 ValueNotifier 而非 setState：切换时只重建标题栏玻璃层，不动整棵树。
   final ValueNotifier<double> _scrollProgress = ValueNotifier<double>(0);
 
   @override
@@ -92,11 +92,14 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   /// 页面滚动 → 标题栏折叠进度。返回 false 让通知继续冒泡。
+  ///
+  /// 先量化为 0/1 两档再写入 notifier：模糊层只做「贴顶 / 滚过」两态
+  /// 渐变动画（见 glass_app_bar.dart），这里没必要每帧喂连续值。
   bool _onScrollNotification(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification) {
       final t = glassProgressOf(notification.metrics);
-      // 节流：进度变化不足 1.5% 不重建，省掉无谓的模糊重算
-      if ((t - _scrollProgress.value).abs() > 0.015) _scrollProgress.value = t;
+      final quantized = t >= 0.5 ? 1.0 : 0.0;
+      if (quantized != _scrollProgress.value) _scrollProgress.value = quantized;
     }
     return false;
   }

@@ -63,20 +63,25 @@ void main() {
 
   testWidgets('折叠态：小字全显、毛玻璃层出现', (tester) async {
     await tester.pumpWidget(wrap(bar(1)));
+    await tester.pumpAndSettle(); // 等 180ms 渐变动画走完
 
     expect(find.byType(BackdropFilter), findsOneWidget);
     expect(opacityOf(tester, const Key('glass-large-title')), 0.0);
     expect(opacityOf(tester, const Key('glass-inline-title')), 1.0);
   });
 
-  testWidgets('中间态：两态标题都不全显（交叉淡入淡出）', (tester) async {
-    await tester.pumpWidget(wrap(bar(0.5)));
-
-    final large = opacityOf(tester, const Key('glass-large-title'));
-    final inline = opacityOf(tester, const Key('glass-inline-title'));
-    expect(large, closeTo(0.5, 0.001));
-    expect(inline, closeTo(0.5, 0.001));
+  testWidgets('量化：滚过一半折叠距离才渐显，未过半保持贴顶', (tester) async {
+    // 0.6：越过量化阈值 → 目标折叠
+    await tester.pumpWidget(wrap(bar(0.6)));
+    await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(opacityOf(tester, const Key('glass-large-title')), 0.0);
+
+    // 0.4：没越过 → 目标贴顶，模糊渐隐回去
+    await tester.pumpWidget(wrap(bar(0.4)));
+    await tester.pumpAndSettle();
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(opacityOf(tester, const Key('glass-large-title')), 1.0);
   });
 
   testWidgets('菜单按钮点击触发回调', (tester) async {
@@ -100,15 +105,16 @@ void main() {
     expect(opacityOf(tester, const Key('glass-large-title')), 1.0);
 
     progress.value = 1;
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byType(BackdropFilter), findsOneWidget);
     expect(opacityOf(tester, const Key('glass-large-title')), 0.0);
     expect(opacityOf(tester, const Key('glass-inline-title')), 1.0);
   });
 
-  testWidgets('深色主题正常渲染（发丝线用亮色高光）', (tester) async {
+  testWidgets('深色主题正常渲染（模糊与底色照常渐显）', (tester) async {
     await tester.pumpWidget(wrap(bar(0.6), brightness: Brightness.dark));
+    await tester.pumpAndSettle();
 
     expect(find.text('动态课程表'), findsNWidgets(2));
     expect(find.byType(BackdropFilter), findsOneWidget);
