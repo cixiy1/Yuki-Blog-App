@@ -64,23 +64,20 @@ class GlassAppBarLayer extends StatelessWidget {
     // 贴顶态整层不渲染（网页版 semifull static 也是全透明），
     // 连 readback 都不发生；过渡与滚动态才铺材质。
     if (t <= 0.01) {
-      return Padding(
-        padding: EdgeInsets.only(top: top),
-        child: Row(
-          children: [
-            const SizedBox(width: 48), // 避开 AppBar leading 菜单按钮
-            Expanded(
-              child: Text(
-                title,
-                key: const Key('glass-title'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: titleStyle,
-              ),
+      return _toolbarSized(top, Row(
+        children: [
+          const SizedBox(width: 48), // 避开 AppBar leading 菜单按钮
+          Expanded(
+            child: Text(
+              title,
+              key: const Key('glass-title'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: titleStyle,
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ));
     }
 
     return TweenAnimationBuilder<double>(
@@ -91,10 +88,15 @@ class GlassAppBarLayer extends StatelessWidget {
         final sigma = ui.lerpDouble(0, 20, v)!; // 网页版 blur = 20px
         final bgAlpha = ui.lerpDouble(0, 0.45, v)!; // 网页版 card-bg 45%
 
-        return Stack(
-          fit: StackFit.expand,
+        // ⚠️ AppBar 的 flexibleSpace 被包在 OverflowBox(maxHeight: infinity) 里，
+        // 直接 Stack(fit: expand) / Positioned.fill 会拿到**无界高度**，
+        // BackdropFilter 的模糊层被撑到全屏 → 糊的是整个屏幕而非标题栏。
+        // 必须先 SizedBox 把高度钉死在「状态栏 + 工具栏行」，Stack 再在其中铺满。
+        return _toolbarSized(top, Stack(
+          // 不用 StackFit.expand：父已被 SizedBox 限高，默认 loose + 下面的
+          // Positioned.fill 即铺满标题栏区域。
           children: [
-            // ① 毛玻璃：模糊穿透到标题栏之下的页面内容
+            // ① 毛玻璃：模糊穿透到标题栏之下的页面内容（只糊这一条）
             if (sigma > 0.01)
               Positioned.fill(
                 child: BackdropFilter(
@@ -147,8 +149,11 @@ class GlassAppBarLayer extends StatelessWidget {
             ),
 
             // ⑤ 标题（固定一行，网页版 navbar 标题同样不折叠）
-            Padding(
-              padding: EdgeInsets.only(top: top),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: top,
+              height: kToolbarHeight,
               child: Row(
                 children: [
                   const SizedBox(width: 48), // 避开 AppBar leading 菜单按钮
@@ -165,8 +170,19 @@ class GlassAppBarLayer extends StatelessWidget {
               ),
             ),
           ],
-        );
+        ));
       },
+    );
+  }
+
+  /// 把 [child] 限高在「状态栏 + 工具栏行」内。
+  ///
+  /// AppBar 的 flexibleSpace 挂在 OverflowBox(maxHeight: infinity) 下，
+  /// 不限高的话 BackdropFilter 会糊满全屏（见 build 内注释）。
+  Widget _toolbarSized(double top, Widget child) {
+    return SizedBox(
+      height: kToolbarHeight + top,
+      child: child,
     );
   }
 }

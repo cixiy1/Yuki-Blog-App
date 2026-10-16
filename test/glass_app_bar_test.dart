@@ -79,6 +79,18 @@ void main() {
     expect(tapped, isTrue);
   });
 
+  testWidgets('模糊层只覆盖标题栏高度，不糊全屏', (tester) async {
+    // 回归：AppBar.flexibleSpace 挂在 OverflowBox(maxHeight: infinity) 下，
+    // 不限高时 BackdropFilter 会被撑到全屏 → 用户看到「全屏模糊」。
+    await tester.pumpWidget(wrap(bar(1)));
+    await tester.pumpAndSettle();
+
+    final blurSize = tester.getSize(find.byType(BackdropFilter));
+    expect(blurSize.height, kToolbarHeight); // 测试环境无状态栏 padding
+    expect(blurSize.height,
+        lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio));
+  });
+
   testWidgets('进度源更新后标题栏跟随刷新（HomeShell 接入方式）', (tester) async {
     final progress = ValueNotifier<double>(0);
     await tester.pumpWidget(wrap(glassAppBar(
