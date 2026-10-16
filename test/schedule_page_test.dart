@@ -12,6 +12,7 @@ import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_detail_panel.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
+import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
 void main() {
   final data = TimetableData.fromRawJson(
@@ -203,5 +204,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('第 5 周'), findsOneWidget);
     expect(find.textContaining('第 5 周无课安排'), findsOneWidget);
+  });
+
+  testWidgets('套沉浸标题栏后：首屏避开标题栏，滚动时内容钻到它下面', (tester) async {
+    // 回归：Scaffold 挂了 appBar 会把 body 的 MediaQuery.padding.top 清成 0，
+    // 而 ListView 又只在 padding 为 null 时自动套用 MediaQuery 留白 ——
+    // 课表页是显式 padding，所以必须自己补上标题栏高度，否则首屏内容会被压住。
+    await tester.pumpWidget(MaterialApp(
+      home: ImmersiveScaffold(
+        title: '动态课程表',
+        body: SchedulePage(repository: InMemoryTimetableRepository(data)),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final header = find.text('软件2615');
+    expect(tester.getTopLeft(header).dy, greaterThanOrEqualTo(kToolbarHeight));
+
+    // 往上一推，班级名就钻进标题栏底下（毛玻璃这才有东西可糊）。
+    // 只滚 60px：标题行仍半露在视口里不会被回收，又已经进入标题栏那条带；
+    // 用 jumpTo 而不是 drag —— drag 抬手的惯性会把首屏几行直接甩出缓存区。
+    tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position
+        .jumpTo(60);
+    await tester.pump();
+    expect(tester.getTopLeft(find.text('软件2615')).dy, lessThan(kToolbarHeight));
+
+    await tester.pumpAndSettle();
+    expect(find.byType(BackdropFilter), findsOneWidget);
   });
 }

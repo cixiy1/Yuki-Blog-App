@@ -227,12 +227,14 @@ void main() {
       Key bodyKey = const Key('page-body'),
       Widget? drawer,
       String title = '待办',
+      bool extendBodyBehindAppBar = true,
     }) {
       return MaterialApp(
         theme: ThemeData.light(useMaterial3: true),
         home: ImmersiveScaffold(
           title: title,
           drawer: drawer,
+          extendBodyBehindAppBar: extendBodyBehindAppBar,
           body: ListView.builder(
             key: bodyKey,
             itemCount: 80,
@@ -251,13 +253,47 @@ void main() {
       expect(find.byType(BackdropFilter), findsNothing);
     });
 
-    testWidgets('内容从标题栏下沿开始（默认不穿透）', (tester) async {
+    testWidgets('内容从标题栏底下穿过（默认穿透，玻璃才有东西可糊）', (tester) async {
       await tester.pumpWidget(page());
+
+      // 滚动视口从屏幕顶端开始（内容能钻到标题栏下面）
+      expect(
+        tester.getTopLeft(find.byKey(const Key('page-body'))).dy,
+        0,
+      );
+      // 但首屏内容靠 MediaQuery 留白避开标题栏（ListView padding 为 null 时
+      // 框架会自动套用这段 padding）
+      final firstLineAtRest = tester.getTopLeft(find.text('第 0 行')).dy;
+      expect(firstLineAtRest, greaterThanOrEqualTo(kToolbarHeight));
+
+      // 只滚 60px：首行仍半露在视口里（不会被 SliverList 回收），
+      // 但已经进入标题栏那条带；同时 60 > 50px 阈值，玻璃该出现了。
+      // 用 jumpTo 而不是 drag：drag 抬手的惯性会把首行直接甩出缓存区。
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(60);
+      await tester.pump();
+      expect(tester.getTopLeft(find.text('第 0 行')).dy, lessThan(kToolbarHeight));
+
+      await tester.pumpAndSettle();
+      expect(find.byType(BackdropFilter), showsBlur);
+    });
+
+    testWidgets('关掉穿透时退回普通布局：内容从标题栏下沿开始', (tester) async {
+      await tester.pumpWidget(page(extendBodyBehindAppBar: false));
 
       expect(
         tester.getTopLeft(find.byKey(const Key('page-body'))).dy,
         kToolbarHeight,
       );
+      // Scaffold 挂 appBar 时会清掉 body 的 padding.top，所以首屏内容
+      // 正好贴着标题栏下沿（不会再多一段留白）
+      expect(
+        tester.getTopLeft(find.text('第 0 行')).dy,
+        greaterThanOrEqualTo(kToolbarHeight),
+      );
+      expect(tester.getTopLeft(find.text('第 0 行')).dy, lessThan(kToolbarHeight * 2));
     });
 
     testWidgets('点菜单打开抽屉', (tester) async {
@@ -273,7 +309,7 @@ void main() {
     testWidgets('滚动超过阈值后标题栏渐显毛玻璃', (tester) async {
       await tester.pumpWidget(page());
 
-      await tester.drag(find.byKey(const Key('page-body')), const Offset(0, -240));
+      await tester.drag(find.text('第 0 行'), const Offset(0, -240));
       await tester.pumpAndSettle();
 
       expect(find.byType(BackdropFilter), showsBlur);
@@ -283,7 +319,7 @@ void main() {
     testWidgets('body 换实例后标题栏收回贴顶态', (tester) async {
       await tester.pumpWidget(page());
 
-      await tester.drag(find.byKey(const Key('page-body')), const Offset(0, -240));
+      await tester.drag(find.text('第 0 行'), const Offset(0, -240));
       await tester.pumpAndSettle();
       expect(find.byType(BackdropFilter), showsBlur);
 
