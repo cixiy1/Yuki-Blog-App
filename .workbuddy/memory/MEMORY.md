@@ -8,7 +8,8 @@
 - 各平台标识四处必须同步：android namespace/applicationId/源码包目录/Manifest，iOS/macOS 的 `PRODUCT_BUNDLE_IDENTIFIER`、`PRODUCT_NAME` 与产物引用（macOS `AppInfo.xcconfig` 决定 PRODUCT_NAME，pbxproj 的 `TEST_HOST` 与 xcscheme 的 `BuildableName` 要跟着改），web `manifest.json`/`index.html`。
 - 命名铁律：不要中英文夹杂，要么全英要么全中。
 - **联动维护义务**：每次为本项目（Yuki-Blog App）开发出实质性功能/里程碑时，必须同步维护博客 yiyu14.top 的「项目展示页」条目及对应的 .md 文档（维护流程见 skill: firefly-projects-page）。新增功能、改名、上线等节点都要检查博客展示项是否需要更新。
-- **Git 日志维护**：每个实质性开发节点（新功能 / 修复 / 重构 / 改名）都要及时单独提交，用 Conventional Commits 规范（feat/fix/docs/chore...），不要攒一堆改动混成一个提交；完成即推送 GitHub（cixiy1/Yuki-Blog-App）。
+- **Git 日志维护**：每个实质性开发节点（新功能 / 修复 / 重构 / 改名）都要及时单独提交，用 Conventional Commits 规范（feat/fix/docs/chore...），不要攒一堆改动混成一个提交。
+- **推送铁律（用户 2026-10-16 明确，最高优先级）**：**未经用户明确允许，不得 `git push`、不得打 tag、不得触发上线（含 GitHub Actions 发版、博客 push master 上 Cloudflare）**。可以本地 commit、本地构建、把 APK 放到 `~/Downloads/`，但一切"对外"的动作（推 GitHub / 发 Release / 上线站点）必须先汇报、等用户点头。改完就说"改好了，等你允许再推"，别默认"提交即推送"。
 - **双端同步点（改一处必须改两处）**：① 关键词词表 App `lib/features/schedule/widgets/keyword_highlight.dart` 的 `kwMap` ↔ 博客 `src/components/widget/ClassSchedule.astro` 的 `TT_KW_MAP`；② 标注解析与档位 `parseAnnotations + sentenceTierOf + buildKeywordSpans` ↔ `ttParseMarks + ttSentTierOf + hlLog`；③ 更新历与通知面板的布局顺序；④ 数据文件 `assets/data/schedule-2615.json` ↔ 博客 `public/assets/data/schedule-2615.json`（**必须两份同步**，`cp` 过去即可，两份 sha256 应相同）；⑤ **同格取格优先级（一格只显示一条）** App `ResolvedEntry.cellPriority` + `resolve()` 建 `cells` 索引 ↔ 博客 `render()` 里的 `cellRank`，规则＝**本周实际发生（有课 / 停课 / 新增）> 晚自习 > 非本周占位**，同级后者胜出。改完用「抽 astro 函数到 node 跑用例」+「Dart/JS 分档对拍」的方式对齐行为。
   - App 的课表数据是**网络优先（`yiyu14.top` 首选）+ 打包资源兜底**，所以纯数据更新**不必发新 APK**；打包那份只是离线兜底与测试基准，但**仍需按 ④ 同步**（否则断网用户看到旧课表），且同步后 App 测试里那几条写死数据量的断言要一起改（课数/overrides 条数/通知条数/第 N 周列集合）。定位格子别用 `find.byType(CourseCell).first`（自定义时段顶行一出现，第一个格子就不是你以为那门课了），改按 `entry.key` 定位。
 - **文字高亮的定位（铁律）**：重点**不写死、也不靠算法猜**。每次有新信息入库（新通知 / 新更新历），必须**先读一遍内容再逐条标注**，标出哪几段值得看；固定词表只负责词类配色，锚点算法只做未审阅内容的兜底。
