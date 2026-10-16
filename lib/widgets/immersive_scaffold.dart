@@ -4,11 +4,13 @@ import 'package:yuki_blog_app/widgets/immersive_app_bar.dart';
 
 /// 带「光感沉浸」标题栏的页面骨架 —— 整页交给它就行。
 ///
-/// 它替你做好四件事：
+/// 它替你做好五件事：
 /// 1. 建 Scaffold（含 [drawer] / [floatingActionButton] / [bottomNavigationBar]）；
 /// 2. 标题栏换成 [ImmersiveAppBar]（贴顶全透明，滚动后渐显毛玻璃，**只糊标题栏那一条**）；
-/// 3. 监听 body 的滚动，换算成标题栏折叠进度（二值，50px 阈值）；
-/// 4. body 换实例时自动把标题栏收回贴顶态（避免上一页的滚动状态带过来）。
+/// 3. **内容从标题栏底下穿过**（默认 `extendBodyBehindAppBar: true`）——
+///    这是玻璃效果能看得见的前提，否则模糊层糊到的只是一片纯背景色；
+/// 4. 监听 body 的滚动，换算成标题栏折叠进度（二值，50px 阈值）；
+/// 5. body 换实例时自动把标题栏收回贴顶态（避免上一页的滚动状态带过来）。
 ///
 /// ```dart
 /// ImmersiveScaffold(
@@ -17,6 +19,20 @@ import 'package:yuki_blog_app/widgets/immersive_app_bar.dart';
 ///   body: ListView(...),
 /// )
 /// ```
+///
+/// ## 内容穿透时的留白（踩坑点）
+///
+/// `Scaffold` 只要挂了 `appBar`，就会把 body 的 `MediaQuery.padding.top` **清成 0**，
+/// 所以「内容避开标题栏」这件事得自己安排。本组件在穿透模式下会把
+/// **「状态栏 + 工具栏」的高度重新补进 body 的 MediaQuery padding**，于是：
+///
+/// - `ListView` / `GridView` **在 `padding` 为 null 时**会自动留出这段
+///   （框架行为：padding 显式给了就不会再套 MediaQuery）；
+/// - 页面里写死 `padding` 的滚动视图，自己用
+///   `MediaQuery.paddingOf(context).top` 补上同样一段即可（参考课表页）；
+/// - `SafeArea` 也会按这个 padding 避让 —— 但**要让内容能钻进标题栏下面，
+///   页面根部的 `SafeArea` 必须 `top: false`**，否则滚动视口整块被压到条下面，
+///   内容永远穿不过去。
 ///
 /// 只想换标题栏、Scaffold 要自己管的，直接用 [ImmersiveAppBar]。
 class ImmersiveScaffold extends StatefulWidget {
@@ -31,7 +47,7 @@ class ImmersiveScaffold extends StatefulWidget {
     this.floatingActionButton,
     this.bottomNavigationBar,
     this.backgroundColor,
-    this.extendBodyBehindAppBar = false,
+    this.extendBodyBehindAppBar = true,
     this.resizeToAvoidBottomInset,
   });
 
@@ -57,8 +73,14 @@ class ImmersiveScaffold extends StatefulWidget {
   final Widget? bottomNavigationBar;
   final Color? backgroundColor;
 
-  /// 内容是否从标题栏底下开始铺（沉浸式的「内容穿透」）。
-  /// 默认 false：内容从标题栏下沿开始，标题始终清晰可读。
+  /// 内容是否从标题栏底下开始铺（**默认 true：真沉浸**）。
+  ///
+  /// true 时 body 从屏幕顶端（y = 0）开始，滚动内容会从标题栏下方穿过，
+  /// 毛玻璃才有东西可糊；同时把「状态栏 + 工具栏」的高度补进 body 的
+  /// `MediaQuery` padding，让滚动视图与 [SafeArea] 自动避让（详见类注释）。
+  ///
+  /// 设成 false 则退回普通布局：body 从标题栏下沿开始，内容永远不会钻到
+  /// 标题栏下面，毛玻璃只糊到一片背景色。
   final bool extendBodyBehindAppBar;
 
   final bool? resizeToAvoidBottomInset;
@@ -102,6 +124,17 @@ class _ImmersiveScaffoldState extends State<ImmersiveScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    // 标题栏实际占掉的高度：状态栏 + 工具栏行
+    final barHeight = media.padding.top + kToolbarHeight;
+    // 内容穿透时把这份高度补回 body 的 MediaQuery —— Scaffold 挂 appBar 时
+    // 会把 body 的 padding.top 清成 0，不补回来的话滚动视图与 SafeArea 都会
+    // 一头顶到屏幕最上面。补上之后：ListView（padding 为 null）自动留白，
+    // 页面里写死 padding 的地方按 paddingOf().top 取用即可。
+    final bodyMedia = widget.extendBodyBehindAppBar
+        ? media.copyWith(padding: media.padding.copyWith(top: barHeight))
+        : media;
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: widget.backgroundColor,
@@ -120,9 +153,12 @@ class _ImmersiveScaffoldState extends State<ImmersiveScaffold> {
             ? null
             : () => _scaffoldKey.currentState?.openDrawer(),
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: _onScrollNotification,
-        child: widget.body,
+      body: MediaQuery(
+        data: bodyMedia,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onScrollNotification,
+          child: widget.body,
+        ),
       ),
     );
   }

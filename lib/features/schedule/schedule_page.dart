@@ -57,7 +57,12 @@ class _SchedulePageState extends State<SchedulePage> {
 
   @override
   Widget build(BuildContext context) {
+    // top: false —— 顶部让给沉浸标题栏：内容要能从它下面穿过去，
+    // 滚动视口一旦被 SafeArea 压到标题栏下沿，就再也钻不进去了。
+    // 首屏的避让改由下面 ListView 的 padding 负责（取 MediaQuery 里
+    // ImmersiveScaffold 补进来的标题栏高度）。
     return SafeArea(
+      top: false,
       child: FutureBuilder<TimetableData>(
         future: _future,
         builder: (context, snapshot) {
@@ -147,9 +152,12 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppTheme.spacingMd,
-        AppTheme.spacingSm,
+        // 标题栏悬浮在内容之上，这段留白让首屏内容避开它（值是
+        // ImmersiveScaffold 补进 MediaQuery 的「状态栏 + 工具栏」高度；
+        // 没套沉浸标题栏时它是 0，这时只剩常规留白）。
+        AppTheme.spacingSm + MediaQuery.paddingOf(context).top,
         AppTheme.spacingMd,
         AppTheme.spacingXl,
       ),
