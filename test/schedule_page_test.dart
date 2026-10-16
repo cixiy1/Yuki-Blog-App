@@ -11,6 +11,7 @@ import 'package:yuki_blog_app/core/timetable_resolver.dart';
 import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_detail_panel.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 import 'package:yuki_blog_app/widgets/immersive_app_bar.dart';
 import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
@@ -49,12 +50,29 @@ void main() {
     expect(find.text('有课'), findsWidgets); // 图例
     expect(find.text('本周调整'), findsOneWidget);
 
-    // 今天列表头（按真实系统日期动态算）
+    // 表头：只渲染**有课的星期列**（resolver 的 days =「数据里出现过的
+    // 星期」∪「本周有条目的星期」，2615 班没有周六日的课），所以断言必须
+    // 从 days 反推，不能假定「今天一定有列」——2026-10-17 周六踩过：
+    // 原来写死断「今天列存在」，周五能过、一到周末必挂。
+    final resolver = TimetableResolver(data);
+    final viewSchedule = resolver.resolve(realWeek);
+    final monday = resolver.mondayOf(realWeek);
+    expect(viewSchedule.days, isNotEmpty);
+    for (final day in viewSchedule.days) {
+      final date = monday.add(Duration(days: day - 1));
+      expect(
+        find.text('${weekdayLabel(day)} ${date.month}/${date.day}'),
+        findsOneWidget,
+        reason: '第 $day 列（${date.month}/${date.day}）应在表头',
+      );
+    }
+
+    // 今天落在本周、且本周确实有这一列时，表头才该出现今天的标签。
     final today = DateTime.now();
-    const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     expect(
-        find.text('${weekdays[today.weekday]} ${today.month}/${today.day}'),
-        findsOneWidget);
+      find.text('${weekdayLabel(today.weekday)} ${today.month}/${today.day}'),
+      viewSchedule.days.contains(today.weekday) ? findsOneWidget : findsNothing,
+    );
 
     // 已在本周时不显示「回到本周」
     expect(find.text('回到本周'), findsNothing);
