@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:yuki_blog_app/core/update_service.dart';
-import 'package:yuki_blog_app/features/home/widgets/glass_app_bar.dart';
 import 'package:yuki_blog_app/features/home/widgets/nav_view.dart';
 import 'package:yuki_blog_app/features/update/update_dialog.dart';
+import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.child});
@@ -46,17 +46,6 @@ class _HomeShellState extends State<HomeShell> {
 
   UpdateService? _updateService;
 
-  /// 标题栏折叠状态（0 = 贴顶全透明，1 = 滚过阈值成毛玻璃），
-  /// 喂给网页版同款的「光感沉浸」标题栏。用 ValueNotifier 而非
-  /// setState：切换时只重建标题栏玻璃层，不动整棵树。
-  final ValueNotifier<double> _scrollProgress = ValueNotifier<double>(0);
-
-  @override
-  void initState() {
-    super.initState();
-    _checkUpdateSilently();
-  }
-
   /// 当前页标题：按路由推断（抽屉是唯一入口，URL 直达也对得上）。
   String get _currentTitle {
     final path = GoRouterState.of(context).uri.path;
@@ -64,6 +53,12 @@ class _HomeShellState extends State<HomeShell> {
       if (path.startsWith(item.path)) return item.label;
     }
     return 'Yuki Blog';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUpdateSilently();
   }
 
   /// 启动时静默检查更新，仅在有新版本时弹窗。
@@ -80,37 +75,14 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     _updateService?.dispose();
-    _scrollProgress.dispose();
     super.dispose();
   }
 
   @override
-  void didUpdateWidget(covariant HomeShell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 路由切换（子页面换实例）时把标题栏收回贴顶态，
-    // 避免上一页的滚动状态残留到新页。
-    if (oldWidget.child != widget.child) _scrollProgress.value = 0;
-  }
-
-  /// 页面滚动 → 标题栏折叠状态（二值，对齐网页版 scrollTop > 50）。
-  /// 返回 false 让通知继续冒泡。
-  bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollUpdateNotification) {
-      final t = glassProgressOf(notification.metrics);
-      if (t != _scrollProgress.value) _scrollProgress.value = t;
-    }
-    return false;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: glassAppBar(
-        title: _currentTitle,
-        progress: _scrollProgress,
-        brightness: Theme.of(context).brightness,
-        onMenu: () => Scaffold.of(context).openDrawer(),
-      ),
+    // 标题栏的滚动监听 / 折叠状态 / 路由切换复位都由 ImmersiveScaffold 内部处理
+    return ImmersiveScaffold(
+      title: _currentTitle,
       drawer: AppNavigationDrawer(
         selectedIndex: _selectedNavIndex,
         menuItems: menuItems,
@@ -124,10 +96,7 @@ class _HomeShellState extends State<HomeShell> {
           context.go(item.path);
         },
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: _onScrollNotification,
-        child: widget.child,
-      ),
+      body: widget.child,
     );
   }
 }
