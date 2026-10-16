@@ -28,6 +28,7 @@ class _SettingPageState extends State<SettingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
@@ -35,6 +36,15 @@ class _SettingPageState extends State<SettingPage> {
           shrinkWrap: true,
           padding: const EdgeInsets.all(24),
           children: [
+            Icon(Icons.settings_outlined,
+                size: 40, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              '设置',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 24),
             Card(
               child: ListTile(
                 leading: _checking

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:yuki_blog_app/core/update_service.dart';
-import 'package:yuki_blog_app/features/home/widgets/glass_app_bar.dart';
 import 'package:yuki_blog_app/features/home/widgets/nav_view.dart';
 import 'package:yuki_blog_app/features/update/update_dialog.dart';
 
@@ -46,23 +45,10 @@ class _HomeShellState extends State<HomeShell> {
 
   UpdateService? _updateService;
 
-  /// 页面滚动折叠状态（0 = 贴顶，1 = 滚过阈值），喂给「光感沉浸」标题栏。
-  /// 用 ValueNotifier 而非 setState：切换时只重建标题栏玻璃层，不动整棵树。
-  final ValueNotifier<double> _scrollProgress = ValueNotifier<double>(0);
-
   @override
   void initState() {
     super.initState();
     _checkUpdateSilently();
-  }
-
-  /// 当前页标题：按路由推断（抽屉是唯一入口，URL 直达也对得上）。
-  String get _currentTitle {
-    final path = GoRouterState.of(context).uri.path;
-    for (final item in menuItems) {
-      if (path.startsWith(item.path)) return item.label;
-    }
-    return 'Yuki Blog';
   }
 
   /// 启动时静默检查更新，仅在有新版本时弹窗。
@@ -79,40 +65,13 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     _updateService?.dispose();
-    _scrollProgress.dispose();
     super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant HomeShell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 路由切换（子页面换实例）时把标题栏收回顶部态，
-    // 避免上一页的滚动进度残留到新页。
-    if (oldWidget.child != widget.child) _scrollProgress.value = 0;
-  }
-
-  /// 页面滚动 → 标题栏折叠进度。返回 false 让通知继续冒泡。
-  ///
-  /// 先量化为 0/1 两档再写入 notifier：模糊层只做「贴顶 / 滚过」两态
-  /// 渐变动画（见 glass_app_bar.dart），这里没必要每帧喂连续值。
-  bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollUpdateNotification) {
-      final t = glassProgressOf(notification.metrics);
-      final quantized = t >= 0.5 ? 1.0 : 0.0;
-      if (quantized != _scrollProgress.value) _scrollProgress.value = quantized;
-    }
-    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: glassAppBar(
-        title: _currentTitle,
-        progress: _scrollProgress,
-        brightness: Theme.of(context).brightness,
-        onMenu: () => Scaffold.of(context).openDrawer(),
-      ),
+      appBar: AppBar(),
       drawer: AppNavigationDrawer(
         selectedIndex: _selectedNavIndex,
         menuItems: menuItems,
@@ -126,10 +85,7 @@ class _HomeShellState extends State<HomeShell> {
           context.go(item.path);
         },
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: _onScrollNotification,
-        child: widget.child,
-      ),
+      body: widget.child,
     );
   }
 }
