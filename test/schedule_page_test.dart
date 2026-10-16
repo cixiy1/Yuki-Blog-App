@@ -41,7 +41,7 @@ void main() {
     await pumpTall(tester, wrapApp());
 
     // 头部 / 周条 / 通知 / 图例 / 本周调整
-    expect(find.text('软件2615 · 动态课程表'), findsOneWidget);
+    expect(find.text('软件2615'), findsOneWidget);
     expect(find.text('第 $realWeek 周'), findsOneWidget);
     expect(find.text('通知'), findsOneWidget);
     expect(find.text('有课'), findsWidgets); // 图例
@@ -92,7 +92,7 @@ void main() {
     expect(find.textContaining('网络同步失败'), findsOneWidget);
     expect(find.textContaining('可能不是最新'), findsOneWidget);
     // 正常展示课表内容（离线兜底生效）
-    expect(find.text('软件2615 · 动态课程表'), findsOneWidget);
+    expect(find.text('软件2615'), findsOneWidget);
   });
 
   testWidgets('网络同步成功时不展示离线提醒', (tester) async {
