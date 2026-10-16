@@ -30,8 +30,12 @@ void main() {
   ///
   /// Web（`flutter test --platform chrome`）上 [ImmersiveGlassLayer.blurSupported]
   /// 为 false —— 引擎不裁剪 BackdropFilter 的图层，滤镜会糊满整页。
-  final Matcher showsBlur =
-      ImmersiveGlassLayer.blurSupported ? findsOneWidget : findsNothing;
+  ///
+  /// 原生后端上模糊层是**一叠横带**（渐进模糊），所以不是「有 1 个」而是「有一组」。
+  /// 测试视口里没有状态栏内边距，标题栏正好 [kToolbarHeight] 高。
+  final Matcher showsBlur = ImmersiveGlassLayer.blurSupported
+      ? findsAtLeastNWidgets(immersiveBlurBands(kToolbarHeight).length)
+      : findsNothing;
 
   /// 把标题栏塞进一个真实 Scaffold，行为才与线上一致。
   Widget wrap(
@@ -68,6 +72,70 @@ void main() {
     ));
     return opacity.opacity;
   }
+
+  /// 取材质底色渐变的两个端点透明度（顶部、底部）。
+  List<double> tintAlphas(WidgetTester tester) {
+    final box = tester.widget<DecoratedBox>(find.byKey(kImmersiveTintKey));
+    final gradient = (box.decoration as BoxDecoration).gradient! as LinearGradient;
+    return [for (final c in gradient.colors) c.a];
+  }
+
+  /// 取当前所有模糊横带的位置（按自上而下的绘制顺序）。
+  List<Rect> bandRects(WidgetTester tester) {
+    final finder = find.byType(BackdropFilter);
+    final n = tester.widgetList(finder).length;
+    return [for (var i = 0; i < n; i++) tester.getRect(finder.at(i))];
+  }
+
+  // ── 渐进模糊分带 ──────────────────────────────────────────────────────
+  group('immersiveBlurBands 渐进分带', () {
+    test('顶部最糊、底部趋近 0，自上而下单调递减', () {
+      final bands = immersiveBlurBands(103);
+
+      // 顶上那几条都在「怎么看都一样糊」的门槛之上
+      expect(bands.first.sigma, greaterThan(kImmersiveBlurKnee));
+      expect(bands.last.sigma, lessThan(1));
+      for (var i = 1; i < bands.length; i++) {
+        expect(bands[i].sigma, lessThan(bands[i - 1].sigma));
+      }
+    });
+
+    test('横带严丝合缝盖满整条标题栏（不重叠、不留缝）', () {
+      for (final height in <double>[56, 103, 103.5, 240]) {
+        final bands = immersiveBlurBands(height);
+
+        expect(bands.first.top, 0, reason: 'height=$height');
+        expect(bands.last.top + bands.last.height, height,
+            reason: 'height=$height');
+        for (var i = 0; i < bands.length; i++) {
+          expect(bands[i].height, greaterThan(0), reason: 'height=$height');
+          if (i > 0) {
+            expect(bands[i].top, bands[i - 1].top + bands[i - 1].height,
+                reason: 'height=$height');
+          }
+        }
+      }
+    });
+
+    test('「反正都是糊」的那一段不切碎：带上宽下窄，条数只有硬切的一半', () {
+      final bands = immersiveBlurBands(103);
+
+      expect(bands.first.height, greaterThan(bands.last.height));
+      // 等 σ 步长硬切要 20 条（20/1），这里靠粗段压到 10 条上下 ——
+      // 每条带一次模糊，少一半就是每帧少一半开销。
+      expect(bands.length, lessThanOrEqualTo(12));
+      expect(bands.length, greaterThanOrEqualTo(8));
+    });
+
+    test('带数只看「占整条多少」，与标题栏高度无关', () {
+      expect(immersiveBlurBands(56).length, immersiveBlurBands(206).length);
+    });
+
+    test('拿不到有限高度就不分带（宁可没模糊，也不糊全屏）', () {
+      expect(immersiveBlurBands(0), isEmpty);
+      expect(immersiveBlurBands(double.infinity), isEmpty);
+    });
+  });
 
   // ── 进度换算 ──────────────────────────────────────────────────────────
   group('immersiveProgressOf 滚动阈值', () {
@@ -122,28 +190,56 @@ void main() {
       await tester.pumpAndSettle();
 
       if (ImmersiveGlassLayer.blurSupported) {
-        expect(find.byType(BackdropFilter), findsOneWidget);
+        expect(find.byType(BackdropFilter), showsBlur);
       } else {
         expect(find.byType(BackdropFilter), findsNothing);
         // 观感不能塌：底色与两条细线仍在
+        expect(find.byKey(kImmersiveTintKey), findsOneWidget);
         expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
         expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
       }
     });
 
-    testWidgets('模糊层只覆盖标题栏高度，不糊全屏', (tester) async {
+    testWidgets('模糊层是一叠横带，只盖满标题栏、不糊全屏', (tester) async {
       // 回归：AppBar.flexibleSpace 挂在 OverflowBox(maxHeight: infinity) 下，
       // 不限高时 BackdropFilter 会被撑到全屏 → 用户看到「全屏模糊」。
+      // 现在模糊层是若干条带，同样必须严格贴在这条标题栏的高度里。
       await tester.pumpWidget(wrap(bar(1)));
       await tester.pumpAndSettle();
 
       if (!ImmersiveGlassLayer.blurSupported) return; // Web 上压根没有模糊层
-      final blurSize = tester.getSize(find.byType(BackdropFilter));
-      expect(blurSize.height, kToolbarHeight); // 测试环境无状态栏 padding
-      expect(
-        blurSize.height,
-        lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
-      );
+
+      final rects = bandRects(tester);
+      final screenHeight =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+
+      expect(rects.length, immersiveBlurBands(kToolbarHeight).length);
+      expect(rects.first.top, 0); // 顶上那条贴屏幕最上沿
+      expect(rects.last.bottom, kToolbarHeight); // 底下那条到标题栏下沿为止
+      expect(kToolbarHeight, lessThan(screenHeight)); // 就是没糊到全屏
+      for (var i = 0; i < rects.length; i++) {
+        expect(rects[i].height, greaterThan(0));
+        // 相邻两条首尾相接：不重叠（模糊会叠一层）、不留缝（会露出没糊的一线）
+        if (i > 0) expect(rects[i].top, rects[i - 1].bottom);
+      }
+    });
+
+    testWidgets('底色上下渐变：顶部最浓、底部淡出（下沿不留硬边）', (tester) async {
+      await tester.pumpWidget(wrap(bar(1)));
+      await tester.pumpAndSettle();
+
+      final alphas = tintAlphas(tester);
+      if (ImmersiveGlassLayer.blurSupported) {
+        // 有模糊：底色跟着模糊一起淡，底下那截才不会留下一条硬边
+        expect(alphas.first, closeTo(kImmersiveTintTop, 0.001));
+        expect(alphas.last, closeTo(kImmersiveTintBottom, 0.001));
+        expect(alphas.first, greaterThan(alphas.last));
+      } else {
+        // Web 没有模糊，底色是唯一的分隔手段，必须维持接近纯色
+        expect(alphas.first, closeTo(kImmersiveTintTopNoBlur, 0.001));
+        expect(alphas.last, closeTo(kImmersiveTintBottomNoBlur, 0.001));
+        expect(alphas.first, closeTo(alphas.last, 0.001));
+      }
     });
 
     testWidgets('标题栏高度 = 工具栏行（不含状态栏内边距时）', (tester) async {
