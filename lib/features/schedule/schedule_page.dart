@@ -245,7 +245,8 @@ class _ScheduleHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${meta.className} · 动态课程表',
+                // 页名「动态课程表」由标题栏大字承担，这里只留班级名，避免重复
+                meta.className,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               Text(
