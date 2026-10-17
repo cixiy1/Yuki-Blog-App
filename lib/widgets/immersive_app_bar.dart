@@ -62,13 +62,6 @@ const double kImmersiveFineSigmaStep = 1;
 const double kImmersiveTintTop = 0.45;
 const double kImmersiveTintBottom = 0.10;
 
-/// 没有模糊可用的后端（Web）替代方案：加浓底色，且**不跟着淡出**。
-///
-/// Web 上没有模糊帮忙，底色就是唯一的分隔手段；再淡出的话，贴在标题栏
-/// 下半部的标题会直接和滚动内容糊在一块儿。
-const double kImmersiveTintTopNoBlur = 0.72;
-const double kImmersiveTintBottomNoBlur = 0.72;
-
 /// 标题文字 Key（贴顶 / 滚动两态共用同一条标题）。
 const Key kImmersiveTitleKey = Key('immersive-title');
 
@@ -191,26 +184,24 @@ class ImmersiveGlassLayer extends StatefulWidget {
   const ImmersiveGlassLayer({
     super.key,
     required this.progress,
-    this.blur,
+    this.blur = true,
   });
 
   /// 折叠进度：0 = 贴顶（全透明），1 = 滚过阈值（毛玻璃）。
   /// 通常由 [immersiveProgressOf] 二值化产出。
   final double progress;
 
-  /// 是否启用毛玻璃。默认 [blurSupported]。
+  /// 是否启用毛玻璃。默认开着，四个平台一视同仁。
   ///
-  /// 需要「看着像但不要真模糊」的场合（例如跑在不支持 BackdropFilter
-  /// 的渲染后端上做截图回归）可以显式关掉，此时退化为加浓底色。
-  final bool? blur;
-
-  /// 当前后端是否支持毛玻璃。
+  /// 只有「看着像但不要真模糊」的场合才需要显式关掉（比如截图回归想要
+  /// 一眼稳定的像素），关掉后退化为加浓底色 + 两条细线。
   ///
-  /// **Flutter Web 上为 false**：Web 引擎画 BackdropFilter 时不对图层做
-  /// 裁剪，滤镜会作用到整张 backdrop，导致「整页糊成一片」（引擎已知缺陷，
-  /// flutter/flutter#48450）。Web 上因此退化为「加浓底色 + 两条细线」，
-  /// 观感接近但不发散发模糊；Android / iOS / macOS 走完整配方。
-  static const bool blurSupported = !kIsWeb;
+  /// 早先这里有个「Web 上不支持 BackdropFilter」的平台开关，**那是误判**：
+  /// 当时把「flexibleSpace 无界高度把模糊层撑到全屏」和「Web 引擎不裁剪」
+  /// 两个 bug 混成了一个，一刀切掉 Web 的模糊。实测（见
+  /// `test/immersive_app_bar_test.dart` 的平台无关断言 + 逐行量边缘扩散）
+  /// CanvasKit 裁剪得好好的，Web 与 Android 的像素曲线几乎逐行重合。
+  final bool blur;
 
   @override
   State<ImmersiveGlassLayer> createState() => _ImmersiveGlassLayerState();
@@ -223,7 +214,7 @@ class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
   /// 分组，引擎的「取样一次、共用给所有带」就白做了。
   final BackdropKey _backdropKey = BackdropKey();
 
-  bool get _blurred => widget.blur ?? ImmersiveGlassLayer.blurSupported;
+  bool get _blurred => widget.blur;
 
   @override
   Widget build(BuildContext context) {
@@ -306,12 +297,9 @@ class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
   /// 之所以不铺纯色：底下那截已经没有模糊了，底色要是还在，就会在标题栏
   /// 下沿留下一条「到边就断」的硬边。底色跟着模糊一起淡，内容才算真的
   /// 从标题栏底下长出来。
-  ///
-  /// 没有模糊可用的后端（Web）没本钱玩渐变，退回接近纯色的加浓底色。
   Widget _tint(ColorScheme scheme, double v) {
-    final aTop = _blurred ? kImmersiveTintTop : kImmersiveTintTopNoBlur;
-    final aBottom =
-        _blurred ? kImmersiveTintBottom : kImmersiveTintBottomNoBlur;
+    const aTop = kImmersiveTintTop;
+    const aBottom = kImmersiveTintBottom;
     return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(

@@ -26,16 +26,17 @@ class _FakeMetrics implements ScrollMetrics {
 }
 
 void main() {
-  /// 当前后端是否该有毛玻璃层。
+  /// 滚动态该有的模糊横带数 —— 一叠带（渐进模糊），不是「一个」。
   ///
-  /// Web（`flutter test --platform chrome`）上 [ImmersiveGlassLayer.blurSupported]
-  /// 为 false —— 引擎不裁剪 BackdropFilter 的图层，滤镜会糊满整页。
+  /// 测试视口里没有状态栏内边距，标题栏正好 [kToolbarHeight] 高，
+  /// 所以直接拿理论分带数当期望值。
   ///
-  /// 原生后端上模糊层是**一叠横带**（渐进模糊），所以不是「有 1 个」而是「有一组」。
-  /// 测试视口里没有状态栏内边距，标题栏正好 [kToolbarHeight] 高。
-  final Matcher showsBlur = ImmersiveGlassLayer.blurSupported
-      ? findsAtLeastNWidgets(immersiveBlurBands(kToolbarHeight).length)
-      : findsNothing;
+  /// **四个平台一视同仁**：早先这里按 `blurSupported` 分支，Web 上断言
+  /// 「没有 BackdropFilter」——那是误判（把 flexibleSpace 无界高度和引擎
+  /// 裁剪混成了一个 bug）。逐行量边缘扩散的实测里，CanvasKit 与原生曲线
+  /// 几乎逐行重合，所以 Web 也走整套配方。
+  final Matcher showsBlur =
+      findsAtLeastNWidgets(immersiveBlurBands(kToolbarHeight).length);
 
   /// 把标题栏塞进一个真实 Scaffold，行为才与线上一致。
   Widget wrap(
@@ -182,22 +183,23 @@ void main() {
       expect(opacityOf(tester, kImmersiveHairlineKey), 1.0);
     });
 
-    testWidgets('Web 后端不铺 BackdropFilter（否则会糊满整页）', (tester) async {
-      // Web 引擎画 BackdropFilter 时不对图层做裁剪，滤镜作用到整张 backdrop
-      // → 用户看到「整页糊成一片」。所以 Web 上直接不铺模糊层，
-      // 退化为「加浓底色 + 两条细线」，观感接近。
+    testWidgets('Web 也铺 BackdropFilter（引擎裁剪是好的，别再关掉）', (tester) async {
+      // 回归记录：这里曾经是「Web 上不铺模糊」。当时的判断依据是
+      // 「Web 引擎画 BackdropFilter 不裁剪图层 → 整页糊」，于是 Web 只剩
+      // 一层平铺底色 —— 用户看到的「逐渐模糊没效果」就是这么来的。
+      //
+      // 真因是 flexibleSpace 的无界高度把模糊层撑到了全屏（另一处 bug），
+      // 两个问题被当成一个修了。修掉限高后实测：把滚动态真机光栅化，
+      // 逐行量「竖直硬边」的过渡宽度，CanvasKit 与原生几乎逐行重合
+      // （0→28 行都是 41~44px 的满糊，88 行 6px，96 行 2px，条外 0px）。
       await tester.pumpWidget(wrap(bar(1)));
       await tester.pumpAndSettle();
 
-      if (ImmersiveGlassLayer.blurSupported) {
-        expect(find.byType(BackdropFilter), showsBlur);
-      } else {
-        expect(find.byType(BackdropFilter), findsNothing);
-        // 观感不能塌：底色与两条细线仍在
-        expect(find.byKey(kImmersiveTintKey), findsOneWidget);
-        expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
-        expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
-      }
+      expect(find.byType(BackdropFilter), showsBlur);
+      // 底色与两条细线也都在，观感是叠加出来的
+      expect(find.byKey(kImmersiveTintKey), findsOneWidget);
+      expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
+      expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
     });
 
     testWidgets('模糊层是一叠横带，只盖满标题栏、不糊全屏', (tester) async {
@@ -206,8 +208,6 @@ void main() {
       // 现在模糊层是若干条带，同样必须严格贴在这条标题栏的高度里。
       await tester.pumpWidget(wrap(bar(1)));
       await tester.pumpAndSettle();
-
-      if (!ImmersiveGlassLayer.blurSupported) return; // Web 上压根没有模糊层
 
       final rects = bandRects(tester);
       final screenHeight =
@@ -229,17 +229,11 @@ void main() {
       await tester.pumpAndSettle();
 
       final alphas = tintAlphas(tester);
-      if (ImmersiveGlassLayer.blurSupported) {
-        // 有模糊：底色跟着模糊一起淡，底下那截才不会留下一条硬边
-        expect(alphas.first, closeTo(kImmersiveTintTop, 0.001));
-        expect(alphas.last, closeTo(kImmersiveTintBottom, 0.001));
-        expect(alphas.first, greaterThan(alphas.last));
-      } else {
-        // Web 没有模糊，底色是唯一的分隔手段，必须维持接近纯色
-        expect(alphas.first, closeTo(kImmersiveTintTopNoBlur, 0.001));
-        expect(alphas.last, closeTo(kImmersiveTintBottomNoBlur, 0.001));
-        expect(alphas.first, closeTo(alphas.last, 0.001));
-      }
+      // 底色跟着模糊一起淡：底下那截已经不清了，底色要是还在，
+      // 就会在标题栏下沿留下一条「到边就断」的硬边。
+      expect(alphas.first, closeTo(kImmersiveTintTop, 0.001));
+      expect(alphas.last, closeTo(kImmersiveTintBottom, 0.001));
+      expect(alphas.first, greaterThan(alphas.last));
     });
 
     testWidgets('标题栏高度 = 工具栏行（不含状态栏内边距时）', (tester) async {
