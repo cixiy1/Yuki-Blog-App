@@ -186,18 +186,38 @@ void main() {
       expect(find.byKey(kImmersiveTitleKey), findsOneWidget);
       expect(find.byType(BackdropFilter), findsNothing);
       expect(find.byKey(kImmersiveHighlightKey), findsNothing);
-      expect(find.byKey(kImmersiveHairlineKey), findsNothing);
+      expect(find.byKey(kImmersiveTintKey), findsNothing);
     });
 
-    testWidgets('滚动态：渐显毛玻璃 + 两条阴影细线', (tester) async {
+    testWidgets('滚动态：渐显毛玻璃 + 顶部高光细线', (tester) async {
       await tester.pumpWidget(wrap(bar(1)));
       await tester.pumpAndSettle(); // 等 360ms 渐变动画走完
 
       expect(find.byType(BackdropFilter), showsBlur);
       expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
-      expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
       expect(opacityOf(tester, kImmersiveHighlightKey), 1.0);
-      expect(opacityOf(tester, kImmersiveHairlineKey), 1.0);
+    });
+
+    testWidgets('只在顶端画一条细线，标题栏下沿不再有发丝线', (tester) async {
+      // 网页版标题栏下沿有 `0 1px 0` 的发丝线，App 上按用户要求去掉了：
+      // 底色本来就向下淡出，下沿没有硬边可压，那条线反而把「内容从底下
+      // 淡出来」切成两截。
+      await tester.pumpWidget(wrap(bar(1)));
+      await tester.pumpAndSettle();
+
+      final barRect = tester.getRect(find.byType(ImmersiveAppBar));
+      final finder = find.descendant(
+        of: find.byType(ImmersiveAppBar),
+        matching: find.byType(ColoredBox),
+      );
+      final lines = [
+        for (var i = 0; i < tester.widgetList(finder).length; i++)
+          tester.getRect(finder.at(i)),
+      ].where((r) => (r.height - 1).abs() < 0.01).toList();
+
+      expect(lines, hasLength(1), reason: '细线只该剩顶部高光那一条');
+      expect(lines.single.top, barRect.top);
+      expect(lines.single.bottom, lessThan(barRect.bottom));
     });
 
     testWidgets('Web 也铺 BackdropFilter（引擎裁剪是好的，别再关掉）', (tester) async {
@@ -213,10 +233,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BackdropFilter), showsBlur);
-      // 底色与两条细线也都在，观感是叠加出来的
+      // 底色与顶部高光线也都在，观感是叠加出来的
       expect(find.byKey(kImmersiveTintKey), findsOneWidget);
       expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
-      expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
     });
 
     testWidgets('模糊层是一叠横带，只盖满标题栏、不糊全屏', (tester) async {
@@ -309,14 +328,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BackdropFilter), showsBlur);
-      expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
+      expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
 
       // 收回贴顶：整层材质消失
       progress.value = 0;
       await tester.pumpAndSettle();
 
       expect(find.byType(BackdropFilter), findsNothing);
-      expect(find.byKey(kImmersiveHairlineKey), findsNothing);
+      expect(find.byKey(kImmersiveHighlightKey), findsNothing);
     });
 
     testWidgets('深色主题正常渲染', (tester) async {
@@ -420,7 +439,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BackdropFilter), showsBlur);
-      expect(find.byKey(kImmersiveHairlineKey), findsOneWidget);
+      expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
     });
 
     testWidgets('body 换实例后标题栏收回贴顶态', (tester) async {

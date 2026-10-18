@@ -12,8 +12,12 @@ import 'package:flutter/services.dart';
 //
 //   · 贴顶态：完全透明 —— 无背景、无模糊、无阴影、无边框；
 //   · 滚动态（滚动超过 50px）：`card-bg` 45% 底色 + `blur(20px)`，
-//     叠加两条 **box-shadow 细线**（顶部内高光 + 底部分发丝线），是阴影不是 border；
+//     叠加一条 **box-shadow 细线**（顶部内高光），是阴影不是 border；
 //   · 过渡：0.36s `cubic-bezier(0.22, 1, 0.36, 1)`，模糊渐显渐隐。
+//
+// 与网页版有一处**有意的差异**：网页版标题栏下沿还有一条发丝线（`0 1px 0`），
+// App 上不画。底色本来就是向下淡出的，下沿早就没有硬边可压；那条线反而在
+// 「内容从底下淡出来」的过渡里显得像一道隔断，所以按用户要求去掉了。
 //
 // 与网页版唯一的差别是**模糊不再是一整条一个强度**：网页 `backdrop-filter`
 // 也只能整条糊，而 App 上做成了**渐进模糊** —— 顶部最糊、向下线性衰减、
@@ -74,9 +78,6 @@ const Key kImmersiveTintKey = Key('immersive-tint');
 
 /// 顶部内高光细线 Key。
 const Key kImmersiveHighlightKey = Key('immersive-highlight');
-
-/// 底部分发丝线 Key。
-const Key kImmersiveHairlineKey = Key('immersive-hairline');
 
 /// 把页面滚动距离二值化为标题栏折叠进度（对齐网页版 `scrollTop > 50`）。
 ///
@@ -150,7 +151,7 @@ List<ImmersiveBlurBand> immersiveBlurBands(
   ];
 }
 
-/// 标题栏的材质层：渐进毛玻璃 + 上下渐变底色 + 两条阴影细线。
+/// 标题栏的材质层：渐进毛玻璃 + 上下渐变底色 + 顶部高光细线。
 ///
 /// 单独抽出来是为了让任何自定义标题栏都能套同一套材质，而不必自己重算
 /// 模糊 / 底色 / 细线。**父级高度必须是有限值**：内部铺满父级，父级高度
@@ -188,7 +189,7 @@ class ImmersiveGlassLayer extends StatefulWidget {
   /// 是否启用毛玻璃。默认开着，四个平台一视同仁。
   ///
   /// 只有「看着像但不要真模糊」的场合才需要显式关掉（比如截图回归想要
-  /// 一眼稳定的像素），关掉后退化为加浓底色 + 两条细线。
+  /// 一眼稳定的像素），关掉后退化为加浓底色 + 顶部高光线。
   ///
   /// 早先这里有个「Web 上不支持 BackdropFilter」的平台开关，**那是误判**：
   /// 当时把「flexibleSpace 无界高度把模糊层撑到全屏」和「Web 引擎不裁剪」
@@ -215,11 +216,12 @@ class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
 
-    // 顶部内高光 / 底部分发丝线（网页版 --navbar-glass-highlight / -hairline）
+    // 顶部内高光（网页版 --navbar-glass-highlight）。
+    // 网页版还有一条底部分发丝线（--navbar-glass-hairline），这里不画：
+    // 底色已经向下淡出，下沿没有硬边要压，那条线只会把「内容从底下淡出来」
+    // 切成两截。
     final highlightColor =
         isDark ? const Color(0x0FFFFFFF) : const Color(0x2EFFFFFF); // .06 / .18
-    final hairlineColor =
-        isDark ? const Color(0x1AFFFFFF) : const Color(0x0F000000); // .10 / .06
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: widget.progress.clamp(0.0, 1.0)),
@@ -246,10 +248,7 @@ class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
                   _tint(scheme, v),
 
                   // ③ 顶部内高光细线（网页版 inset 0 1px 0）
-                  _line(kImmersiveHighlightKey, highlightColor, v, top: 0),
-
-                  // ④ 底部分发丝线（网页版 0 1px 0）
-                  _line(kImmersiveHairlineKey, hairlineColor, v, bottom: 0),
+                  _line(kImmersiveHighlightKey, highlightColor, v),
                 ],
               ),
             );
@@ -313,13 +312,14 @@ class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
     );
   }
 
-  /// 两条阴影细线（顶部内高光 / 底部分发丝线），随进度渐显。
-  Widget _line(Key key, Color color, double v, {double? top, double? bottom}) {
+  /// 顶部内高光细线（网页版 `inset 0 1px 0`），随进度渐显。
+  ///
+  /// 只有顶部这一条 —— 底部分发丝线按用户要求已去掉，见文件头注释。
+  Widget _line(Key key, Color color, double v) {
     return Positioned(
       left: 0,
       right: 0,
-      top: top,
-      bottom: bottom,
+      top: 0,
       height: 1,
       child: IgnorePointer(
         child: Opacity(
