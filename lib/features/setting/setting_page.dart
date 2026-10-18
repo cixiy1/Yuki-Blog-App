@@ -79,6 +79,12 @@ class _SettingPageState extends State<SettingPage> {
           shrinkWrap: true,
           padding: const EdgeInsets.all(24),
           children: [
+            Text(
+              '设置',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 36, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 36),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.info_outline),
