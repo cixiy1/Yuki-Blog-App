@@ -22,30 +22,47 @@ import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 /// **别再给 Web 开后门** —— 2026-10-17 就是因为按平台把 Web 的模糊整个
 /// 关掉了，才出现「逐渐模糊没效果」。
 void main() {
-  /// 某一行上硬边的过渡宽度（px）：从接近亮端跨到接近暗端有多远。
+  /// 某一行上硬边的过渡宽度（px，亚像素精度）：从 90% 亮端跨到 10% 暗端。
   ///
   /// 返回 null = 这一行没有足够对比度（内容没铺到这儿），不算数。
+  ///
+  /// 用线性插值找阈值穿越点，而不是数整数像素：低 σ 段的过渡只有十来像素，
+  /// 整数量化误差能到 ±1px，而相邻两带的真实差距只有 2.56·Δσ ≈ 2.5px ——
+  /// 不插值就等于在噪声里找信号。
+  ///
+  /// 清晰的一刀切在这里约等于 0.8（穿越点落在相邻两个像素之间），
+  /// 所以「有没有糊」的判据是 > 2 左右，很好区分。
   ///
   /// 窗口取 x ∈ [300, 580)：**必须避开标题栏自己的图标和标题文字**
   /// （左起 ~56px 是菜单键、其后是标题，测试环境没有真字体、字形会渲染成
   /// 实心色块，压进窗口里会被误判成「糊了」）。所以硬边放在 x=400。
-  int? edgeWidth(Uint8List rgba, int width, int y,
+  double? edgeWidth(Uint8List rgba, int width, int y,
       {int x0 = 300, int x1 = 580}) {
+    int at(int x) => rgba[(y * width + x) * 4];
     var hi = 0, lo = 255;
     for (var x = x0; x < x1; x++) {
-      final v = rgba[(y * width + x) * 4];
+      final v = at(x);
       if (v > hi) hi = v;
       if (v < lo) lo = v;
     }
     if (hi - lo < 40) return null;
     final tHi = lo + 0.9 * (hi - lo);
     final tLo = lo + 0.1 * (hi - lo);
-    int? a, b;
-    for (var x = x0; x < x1; x++) {
-      final v = rgba[(y * width + x) * 4];
-      a ??= v <= tHi ? x : null;
-      b ??= v <= tLo ? x : null;
+
+    /// 从左往右第一次跌破 [t] 的位置（插值到亚像素）
+    double? cross(double t) {
+      for (var x = x0 + 1; x < x1; x++) {
+        final a = at(x - 1), b = at(x);
+        if (a > t && b <= t) {
+          if (a == b) return x.toDouble();
+          return (x - 1) + (a - t) / (a - b);
+        }
+      }
+      return null;
     }
+
+    final a = cross(tHi);
+    final b = cross(tLo);
     if (a == null || b == null) return null;
     return (b - a).abs();
   }
@@ -113,7 +130,7 @@ void main() {
     var (rgba, width) = await grab();
     for (var y = 8; y < barHeight - 4; y += 8) {
       final w = edgeWidth(rgba, width, y);
-      expect(w, anyOf(isNull, 0),
+      expect(w, anyOf(isNull, lessThan(1.5)),
           reason: '贴顶态 y=$y 处不该有模糊，实测过渡宽度 $w');
     }
 
@@ -126,13 +143,13 @@ void main() {
 
     (rgba, width) = await grab();
 
-    // ① 条内：自上而下单调变清（容差 2px 吸收分带边界的抖动）
-    int? prev;
+    // ① 条内：自上而下单调变清（容差 3px 吸收测量抖动）
+    double? prev;
     for (var y = 8; y < barHeight - 6; y += 4) {
       final w = edgeWidth(rgba, width, y);
       expect(w, isNotNull, reason: '条内 y=$y 应该有可测的硬边');
       if (prev != null) {
-        expect(w!, lessThanOrEqualTo(prev + 2),
+        expect(w!, lessThanOrEqualTo(prev + 3),
             reason: 'y=$y 的模糊不该比上一行更重（$w > $prev）');
       }
       prev = w;
@@ -147,8 +164,46 @@ void main() {
 
     // ③ 条外：必须一刀切。这里一旦出现扩散，就是「整页糊」回归了。
     for (final y in [barHeight + 8, barHeight + 40, barHeight + 120]) {
-      expect(edgeWidth(rgba, width, y), 0,
+      expect(edgeWidth(rgba, width, y), lessThan(1.5),
           reason: '标题栏外面（y=$y）必须是清晰的一刀切');
+    }
+
+    // ④ 每条横带的接缝处不能「跳一下」。
+    //
+    // 这是「割裂感」的量化：带与带之间 σ 突变多少，相邻两条的模糊强度就差
+    // 多少，眼睛看到的就是一条横线。
+    //
+    // 判据取「带内逐行平均」而不是「接缝上下两行相减」：单行测量抖动大，
+    // 而相邻两带的真实差距只有 2.56·Δσ ≈ 2.5px —— 逐行相减等于在噪声里
+    // 找信号。带内平均把抖动摊掉，剩下的是这条带真正的模糊强度。
+    //
+    // 阈值 8：等步长（Δσ=1）时实测 2.5~5.4（CanvasKit 与 Skia 的模糊实现
+    // 略有差异；高 σ 段过渡平缓，8bit 量化在插值时被放大，所以留足余量）。
+    // 而曾经 σ>8 那段用 6 的粗步长，相邻带差到 15px 上下，一眼就是横线 ——
+    // 8 依然能把那次回退抓住。
+    //
+    // 「步长必须小」这条更精确的约束在 immersive_app_bar_test.dart 里直接对
+    // σ 阶梯断言（与渲染后端无关），这里只管「渲染出来真的看不出横线」。
+    final bands = immersiveBlurBands(barHeight.toDouble());
+    final means = <double>[];
+    for (final b in bands) {
+      final rows = <double>[];
+      for (var y = b.top.round() + 1; y < (b.top + b.height).round(); y++) {
+        final w = edgeWidth(rgba, width, y);
+        if (w != null) rows.add(w);
+      }
+      if (rows.isEmpty) continue;
+      means.add(rows.reduce((a, b) => a + b) / rows.length);
+    }
+    expect(means.length, greaterThanOrEqualTo(16),
+        reason: '大部分横带都该能量到（实际 ${means.length} 条）');
+    for (var i = 1; i < means.length; i++) {
+      expect(
+        (means[i] - means[i - 1]).abs(),
+        lessThanOrEqualTo(8),
+        reason: '第 $i 条横带与上一条的模糊强度差太多'
+            '（${means[i - 1].toStringAsFixed(1)} → ${means[i].toStringAsFixed(1)}），会看出横线',
+      );
     }
   });
 }

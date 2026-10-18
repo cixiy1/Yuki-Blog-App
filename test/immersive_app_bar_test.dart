@@ -93,8 +93,8 @@ void main() {
     test('顶部最糊、底部趋近 0，自上而下单调递减', () {
       final bands = immersiveBlurBands(103);
 
-      // 顶上那几条都在「怎么看都一样糊」的门槛之上
-      expect(bands.first.sigma, greaterThan(kImmersiveBlurKnee));
+      // 顶上那条的 σ 取的是带中点处的值，所以略小于上限
+      expect(bands.first.sigma, closeTo(kImmersiveBlurSigma, 1));
       expect(bands.last.sigma, lessThan(1));
       for (var i = 1; i < bands.length; i++) {
         expect(bands[i].sigma, lessThan(bands[i - 1].sigma));
@@ -118,14 +118,31 @@ void main() {
       }
     });
 
-    test('「反正都是糊」的那一段不切碎：带上宽下窄，条数只有硬切的一半', () {
-      final bands = immersiveBlurBands(103);
+    test('相邻两带的 σ 差距足够小 —— 这是「割裂感」的唯一来源', () {
+      // 曾经 σ>8 那段用 6 的步长（省开销），结果每条缝差出十几像素的扩散
+      // 宽度，肉眼能从雾里挑出一条条横线。这里把「步长」钉死：相邻带的 σ
+      // 差不得超过一个 kImmersiveSigmaStep（留一点容差给整数像素对齐）。
+      for (final height in <double>[56, 103, 103.5, 140, 240]) {
+        final bands = immersiveBlurBands(height);
+        for (var i = 1; i < bands.length; i++) {
+          expect(
+            bands[i - 1].sigma - bands[i].sigma,
+            lessThanOrEqualTo(kImmersiveSigmaStep * 1.5),
+            reason: 'height=$height 第 $i 条带与上一条差得太多，会看出横线',
+          );
+        }
+      }
+    });
 
-      expect(bands.first.height, greaterThan(bands.last.height));
-      // 等 σ 步长硬切要 20 条（20/1），这里靠粗段压到 10 条上下 ——
-      // 每条带一次模糊，少一半就是每帧少一半开销。
-      expect(bands.length, lessThanOrEqualTo(12));
-      expect(bands.length, greaterThanOrEqualTo(8));
+    test('条数由 σ 上限 / 步长决定，并被上限兜住', () {
+      // 20 / 1 → 20 条带（σ 从 20 落到 0，共 20 个区间）
+      expect(
+        immersiveBlurBands(103).length,
+        (kImmersiveBlurSigma / kImmersiveSigmaStep).round(),
+      );
+      // 步长再小也不会切出超过上限的条数
+      expect(immersiveBlurBands(103, step: 0.1).length,
+          lessThanOrEqualTo(kImmersiveMaxBands));
     });
 
     test('带数只看「占整条多少」，与标题栏高度无关', () {

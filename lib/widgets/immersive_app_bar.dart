@@ -42,18 +42,19 @@ const Cubic kImmersiveCurve = Cubic(0.22, 1, 0.36, 1);
 /// 顶部那一条横带的最大模糊 σ，对齐网页版 `blur(20px)`。
 const double kImmersiveBlurSigma = 20;
 
-/// 「反正都是糊」的 σ 门槛。
+/// 相邻两条横带的 σ 步长。
 ///
-/// 实测：σ 过了 8 左右，再往上加对屏幕上的字/线已经没有任何视觉差别了
-/// （1px 的笔画和 20px 的字全化成一团）。所以 σ 大于它的那一段用粗步长分带，
-/// 只有 σ 小于它的这一段才需要切细 —— 那才是眼睛能看出「逐渐变清」的地方。
-const double kImmersiveBlurKnee = 8;
+/// 这个值**直接决定横带看不看得出来**，别再随手调大。σ 每跳 1，一条竖直
+/// 硬边在屏幕上扩散的视觉宽度大约变化 2px，是一条几乎不留痕的浅过渡；
+/// 之前 σ>8 那段用了 6 的粗步长（理由是「反正都糊成一团，看不出差别」），
+/// 结果一条缝就差出十几像素 —— 眼睛立刻能从雾里挑出一条横线，这正是
+/// 用户说的「割裂」。所以全程等步长，不再分段。
+const double kImmersiveSigmaStep = 1;
 
-/// 门槛以上（σ > [kImmersiveBlurKnee]）的 σ 步长。看不出差别，带可以很宽。
-const double kImmersiveCoarseSigmaStep = 6;
-
-/// 门槛以下（σ < [kImmersiveBlurKnee]）的 σ 步长。看得见变化，带要细。
-const double kImmersiveFineSigmaStep = 1;
+/// 横带数量上限，只为防极端参数把每帧的模糊次数放飞。
+///
+/// σ 上限 20 + 步长 1，天然切出 21 条，正常标题栏都在这以内。
+const int kImmersiveMaxBands = 28;
 
 /// 材质底色的浓度（滚动到位时）：顶部最浓、底部淡出。
 ///
@@ -96,16 +97,13 @@ typedef ImmersiveBlurBand = ({double top, double height, double sigma});
 /// 骗过眼睛。于是内容从标题栏下沿钻出来时是清晰的，越往上越糊 ——
 /// 这就是**渐进模糊**。
 ///
-/// σ 与「离标题栏顶端的距离」是线性的，即 `σ(y) = maxSigma * (1 - y / height)`。
-/// 切带只是把这条直线做成阶梯，**带切在哪里由 σ 的步长决定**：
+/// σ 与「离标题栏顶端的距离」是线性的（`σ(y) = maxSigma * (1 - y / height)`），
+/// 切带只是把这条直线做成阶梯，带切在哪里由 [kImmersiveSigmaStep] 决定：
+/// **步长越小，带越密，缝越浅**。
 ///
-/// · `σ > ` [kImmersiveBlurKnee]：怎么看都一样糊，用粗步长
-///   [kImmersiveCoarseSigmaStep]，两条带就盖掉上半截；
-/// · `σ < ` [kImmersiveBlurKnee]：这才是「逐渐变清」的那一段，用细步长
-///   [kImmersiveFineSigmaStep] 切密一点。
-///
-/// 这样切出来大约十条带，只有「等 σ 步长」硬切的一半 —— 每条带一次模糊，
-/// 省下来的是实打实的每帧开销。
+/// 这里是「割裂感」的唯一开关。曾经为了省开销，把 σ > 8 那一段的步长放大到 6，
+/// 理由是「反正都糊成一团、看不出差别」—— 实际渲染出来每条缝都差出十几像素的
+/// 扩散宽度，眼睛能清楚地从雾里挑出一条条横线。所以现在不分段，全程等步长。
 ///
 /// 每条带用的 σ 取自己垂直中点处的值（阶梯拟合直线误差最小）。
 /// 带的边界按整数像素对齐且严丝合缝（不重叠、不留缝）：重叠会让相邻两条的
@@ -116,25 +114,21 @@ typedef ImmersiveBlurBand = ({double top, double height, double sigma});
 List<ImmersiveBlurBand> immersiveBlurBands(
   double height, {
   double maxSigma = kImmersiveBlurSigma,
+  double step = kImmersiveSigmaStep,
 }) {
-  if (!height.isFinite || height <= 0 || maxSigma <= 0) return const [];
-
-  // ① 先排 σ 阶梯：粗段 → 门槛 → 细段 → 0
-  final steps = <double>[maxSigma];
-  if (kImmersiveBlurKnee < maxSigma) {
-    for (var s = maxSigma - kImmersiveCoarseSigmaStep;
-        s > kImmersiveBlurKnee;
-        s -= kImmersiveCoarseSigmaStep) {
-      steps.add(s);
-    }
-    steps.add(kImmersiveBlurKnee);
+  if (!height.isFinite || height <= 0 || maxSigma <= 0 || step <= 0) {
+    return const [];
   }
-  if (kImmersiveFineSigmaStep > 0) {
-    for (var s = kImmersiveBlurKnee - kImmersiveFineSigmaStep;
-        s > 0;
-        s -= kImmersiveFineSigmaStep) {
-      steps.add(s);
-    }
+
+  // 步长太小时按上限反算一个仍够密的步长（宁可略粗，也不截断后在底部留个
+  // 从大 σ 直接跳到 0 的断层）。
+  final cap = maxSigma / (kImmersiveMaxBands - 1);
+  final effStep = step > cap ? step : cap;
+
+  // ① 排 σ 阶梯：maxSigma → … → 0，等步长
+  final steps = <double>[maxSigma];
+  for (var s = maxSigma - effStep; s > effStep * 0.5; s -= effStep) {
+    steps.add(s);
   }
   steps.add(0);
 
