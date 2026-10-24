@@ -32,16 +32,32 @@ const List<Color> _paletteDark = [
 /// - 每条记录按 8 色循环：左侧色条 + 日期彩色徽章
 /// - 正文按 6 类关键词高亮（见 keyword_highlight.dart）
 /// - 竖排：日期徽章独占上行，正文占满整行（手机端更舒展）
-class ChangelogPanel extends StatelessWidget {
+class ChangelogPanel extends StatefulWidget {
   const ChangelogPanel({super.key, required this.meta});
 
   final TimetableMeta meta;
 
+  /// 折叠时展示的条数（按「最新在前」，折叠隐藏的是更早的记录）。
+  static const int collapsedCount = 4;
+
+  @override
+  State<ChangelogPanel> createState() => _ChangelogPanelState();
+}
+
+class _ChangelogPanelState extends State<ChangelogPanel> {
+  bool _expanded = false;
+
   @override
   Widget build(BuildContext context) {
+    final meta = widget.meta;
     if (meta.changelog.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final total = meta.changelog.length;
+    final collapsible = total > ChangelogPanel.collapsedCount;
+    final shown = _expanded || !collapsible
+        ? total
+        : ChangelogPanel.collapsedCount;
     final palette = isDark ? _paletteDark : _paletteLight;
     final accent = palette[4]; // 蓝色强调（与博客 --tt-log-c5 对应）
 
@@ -108,24 +124,49 @@ class ChangelogPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppTheme.spacingSm),
-          // 与博客线一致：条目多时限制高度滚动，避免撑爆课表页
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < meta.changelog.length; i++)
-                    _ChangelogRow(
-                      entry: meta.changelog[i],
-                      color: palette[i % palette.length],
-                      isLatest: i == 0,
-                      isDark: isDark,
+          // 折叠 / 展开，**内部不再套滚动视图**。
+          //
+          // 网页版这里是「限高 320 + 内部滚动」，浏览器会把滚到头的滚动
+          // 继续传给页面；Flutter 不会。鼠标停在更新历上时指针信号被内层
+          // 滚动框独占，页面一动不动 —— 表现为「从课表往下滑，滑到下面就
+          // 卡住」（实测外页 offset 1279→1279、内层 0→300）。
+          // 折叠代替内滚动：不藏内容、也不抢页面滚动。
+          for (var i = 0; i < shown; i++)
+            _ChangelogRow(
+              entry: meta.changelog[i],
+              color: palette[i % palette.length],
+              isLatest: i == 0,
+              isDark: isDark,
+            ),
+          if (collapsible)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                style: TextButton.styleFrom(
+                  foregroundColor: accent,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _expanded ? '收起' : '展开全部 $total 条',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                ],
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

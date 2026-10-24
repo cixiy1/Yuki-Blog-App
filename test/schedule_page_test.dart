@@ -99,6 +99,14 @@ void main() {
     );
     expect(find.text('数据更新历'), findsOneWidget);
     expect(find.textContaining('最近更新于'), findsWidgets);
+    // 更新历默认折叠（只建最新 4 条），更早的记录要先展开才看得到。
+    // 折叠是刻意的：面板原来内嵌滚动框，会独占鼠标滚轮，页面滑到这里就卡住。
+    final expandLabel = find.textContaining('展开全部');
+    expect(expandLabel, findsOneWidget);
+    await tester.ensureVisible(expandLabel);
+    await tester.pumpAndSettle();
+    await tester.tap(expandLabel);
+    await tester.pumpAndSettle();
     expect(find.textContaining('团支书'), findsWidgets); // 更新历 + 通知区
   });
 
