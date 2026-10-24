@@ -8,5 +8,11 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- App Sandbox 下发起出站连接必须显式声明，否则课表同步 / 检查更新
+	     全部被系统拒绝（表现为「网络同步失败」，日志里是 -1009 或
+	     Operation not permitted）。注意 network.server 是监听本地端口，
+	     给 Flutter 调试用的 VM service，跟出站请求无关，别拿它顶替。 -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>

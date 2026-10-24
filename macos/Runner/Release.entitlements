@@ -4,5 +4,9 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- 出站网络：课表在线同步、检查更新都靠它。缺了这条，Release 版
+	     在 macOS 上永远「网络同步失败」。 -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>
