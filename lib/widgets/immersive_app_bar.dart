@@ -11,27 +11,28 @@ import 'package:flutter/services.dart';
 // `src/styles/navbar.css` + `src/components/layout/Navbar.astro`）实现：
 //
 //   · 贴顶态：完全透明 —— 无背景、无模糊、无阴影、无边框；
-//   · 滚动态（滚动超过 50px）：`card-bg` 45% 底色 + `blur(20px)`，
+//   · 滚动态（滚动超过 50px）：取主题背景色铺 45% + **整条** `blur(20px)`，
 //     叠加一条 **box-shadow 细线**（顶部内高光），是阴影不是 border；
 //   · 过渡：0.36s `cubic-bezier(0.22, 1, 0.36, 1)`，模糊渐显渐隐。
 //
-// 与网页版有一处**有意的差异**：网页版标题栏下沿还有一条发丝线（`0 1px 0`），
-// App 上不画。底色本来就是向下淡出的，下沿早就没有硬边可压；那条线反而在
-// 「内容从底下淡出来」的过渡里显得像一道隔断，所以按用户要求去掉了。
+// 模糊是**整条一个强度**，与网页版 `backdrop-filter: blur(20px)` 一一对应：
+// 一层半透明背景色 + 一次全幅模糊，没有第二条通道。
 //
-// 与网页版唯一的差别是**模糊不再是一整条一个强度**：网页 `backdrop-filter`
-// 也只能整条糊，而 App 上做成了**渐进模糊** —— 顶部最糊、向下线性衰减、
-// 到底部趋近于零，内容是从标题栏底下「淡出来」而不是「被一刀切掉」。
-// 实现方式见 [immersiveBlurBands]。
+// 曾经做过「渐进模糊」——把标题栏横切成 20 条带、σ 自上而下递减到 0，让内容
+// 从底下「淡出来」而不是被一刀切。观感确实更柔和，但条带之间必然留接缝
+// （Δσ 每级对应约 2.5px 的扩散宽度差），实机上能看出横线；已按用户要求
+// 去掉分带，改回整条统一模糊。
+//
+// 与网页版有一处**有意的差异**：网页版标题栏下沿还有一条发丝线（`0 1px 0`），
+// App 上不画，按用户要求去掉了。
 //
 // 两种用法（任选）：
 //   1. `ImmersiveScaffold` —— 整页交给它，自带 Scaffold / 抽屉 / 滚动监听，最省事；
 //   2. `ImmersiveAppBar`  —— 只想换个标题栏，自己管 Scaffold，把它塞进 appBar 槽。
 //
 // 性能：模糊**不跟手**。滚动进度先二值化（滚过 50px 即 1，否则 0），
-// 模糊由一次 [kImmersiveTransition] 渐变动画完成 —— BackdropFilter 每帧
-// readback 在真机上很卡，只让它动个位数的帧次；横带共享一个 backdrop key，
-// 一次取样供所有带用。
+// 模糊由一次 [kImmersiveTransition] 渐变动画完成 —— BackdropFilter 每次
+// readback 在真机上很卡，所以只让它动个位数的帧次，且整层只取样一次。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// 进入滚动态的滚动阈值，对齐网页版 `scrollTop > 50`。
@@ -43,29 +44,14 @@ const Duration kImmersiveTransition = Duration(milliseconds: 360);
 /// 过渡曲线，与网页版 `cubic-bezier(0.22, 1, 0.36, 1)` 完全一致。
 const Cubic kImmersiveCurve = Cubic(0.22, 1, 0.36, 1);
 
-/// 顶部那一条横带的最大模糊 σ，对齐网页版 `blur(20px)`。
+/// 整条标题栏的模糊 σ，对齐网页版 `blur(20px)`。
 const double kImmersiveBlurSigma = 20;
 
-/// 相邻两条横带的 σ 步长。
+/// 材质底色的浓度：取主题背景色铺这么厚的半透明，对齐网页版 `card-bg` 45%。
 ///
-/// 这个值**直接决定横带看不看得出来**，别再随手调大。σ 每跳 1，一条竖直
-/// 硬边在屏幕上扩散的视觉宽度大约变化 2px，是一条几乎不留痕的浅过渡；
-/// 之前 σ>8 那段用了 6 的粗步长（理由是「反正都糊成一团，看不出差别」），
-/// 结果一条缝就差出十几像素 —— 眼睛立刻能从雾里挑出一条横线，这正是
-/// 用户说的「割裂」。所以全程等步长，不再分段。
-const double kImmersiveSigmaStep = 1;
-
-/// 横带数量上限，只为防极端参数把每帧的模糊次数放飞。
-///
-/// σ 上限 20 + 步长 1，天然切出 21 条，正常标题栏都在这以内。
-const int kImmersiveMaxBands = 28;
-
-/// 材质底色的浓度（滚动到位时）：顶部最浓、底部淡出。
-///
-/// 顶部 0.45 对齐网页版 `card-bg` 45%；底部必须跟着模糊一起淡下去，
-/// 否则底下那截「已经不糊了」的区域上还盖着一层底色，看着像玻璃坏了。
-const double kImmersiveTintTop = 0.45;
-const double kImmersiveTintBottom = 0.10;
+/// 整条统一，不随高度变化 —— 模糊本身也不再渐变，底色跟着渐变就没有对应的
+/// 依据了，只会让上下两截看起来像两块不同的玻璃。
+const double kImmersiveTintAlpha = 0.45;
 
 /// 标题文字 Key（贴顶 / 滚动两态共用同一条标题）。
 const Key kImmersiveTitleKey = Key('immersive-title');
@@ -88,73 +74,10 @@ double immersiveProgressOf(ScrollMetrics metrics) {
   return metrics.pixels > kImmersiveScrollThreshold ? 1 : 0;
 }
 
-/// 一条渐进模糊横带：纵向范围（相对标题栏顶端）+ 这一段用的模糊 σ。
-typedef ImmersiveBlurBand = ({double top, double height, double sigma});
-
-/// 把 [height] 高的标题栏横切成若干条带，**自上而下 σ 递减到 0**。
-///
-/// 为什么要切带：`ui.ImageFilter.blur` 的 σ 是个常量，没有「纵向渐变」的滤镜，
-/// 想让模糊沿着高度变化，只能把标题栏切成窄带、每条各给一个 σ，靠「带够窄」
-/// 骗过眼睛。于是内容从标题栏下沿钻出来时是清晰的，越往上越糊 ——
-/// 这就是**渐进模糊**。
-///
-/// σ 与「离标题栏顶端的距离」是线性的（`σ(y) = maxSigma * (1 - y / height)`），
-/// 切带只是把这条直线做成阶梯，带切在哪里由 [kImmersiveSigmaStep] 决定：
-/// **步长越小，带越密，缝越浅**。
-///
-/// 这里是「割裂感」的唯一开关。曾经为了省开销，把 σ > 8 那一段的步长放大到 6，
-/// 理由是「反正都糊成一团、看不出差别」—— 实际渲染出来每条缝都差出十几像素的
-/// 扩散宽度，眼睛能清楚地从雾里挑出一条条横线。所以现在不分段，全程等步长。
-///
-/// 每条带用的 σ 取自己垂直中点处的值（阶梯拟合直线误差最小）。
-/// 带的边界按整数像素对齐且严丝合缝（不重叠、不留缝）：重叠会让相邻两条的
-/// 模糊叠加、边界处突然变糊，留缝则会在中间露出一线没被模糊的内容。
-///
-/// 带数与 [height] 无关 —— σ 只跟「占整条的百分之几」有关，所以小屏大屏
-/// 切出来一样多。
-List<ImmersiveBlurBand> immersiveBlurBands(
-  double height, {
-  double maxSigma = kImmersiveBlurSigma,
-  double step = kImmersiveSigmaStep,
-}) {
-  if (!height.isFinite || height <= 0 || maxSigma <= 0 || step <= 0) {
-    return const [];
-  }
-
-  // 步长太小时按上限反算一个仍够密的步长（宁可略粗，也不截断后在底部留个
-  // 从大 σ 直接跳到 0 的断层）。
-  final cap = maxSigma / (kImmersiveMaxBands - 1);
-  final effStep = step > cap ? step : cap;
-
-  // ① 排 σ 阶梯：maxSigma → … → 0，等步长
-  final steps = <double>[maxSigma];
-  for (var s = maxSigma - effStep; s > effStep * 0.5; s -= effStep) {
-    steps.add(s);
-  }
-  steps.add(0);
-
-  // ② 再把 σ 阶梯翻译成高度（σ 与 y 是直线关系，两端一反算就得到带的范围）
-  double yOf(double sigma) => sigma <= 0
-      ? height
-      : (height * (1 - sigma / maxSigma)).roundToDouble();
-
-  return [
-    for (var i = 0; i < steps.length - 1; i++)
-      if (yOf(steps[i + 1]) - yOf(steps[i]) > 0)
-        (
-          top: yOf(steps[i]),
-          height: yOf(steps[i + 1]) - yOf(steps[i]),
-          // 取垂直中点处的 σ：阶梯拟合直线这样误差最小
-          sigma: maxSigma *
-              (1 - (yOf(steps[i]) + yOf(steps[i + 1])) / 2 / height),
-        ),
-  ];
-}
-
-/// 标题栏的材质层：渐进毛玻璃 + 上下渐变底色 + 顶部高光细线。
+/// 标题栏的材质层：整条毛玻璃 + 一层半透明背景色 + 顶部高光细线。
 ///
 /// 单独抽出来是为了让任何自定义标题栏都能套同一套材质，而不必自己重算
-/// 模糊 / 底色 / 细线。**父级高度必须是有限值**：内部铺满父级，父级高度
+/// 模糊 / 底色 / 细线。**父级尺寸必须是有限的**：内部铺满父级，父级高度
 /// 即模糊层高度（否则 BackdropFilter 会被撑到全屏）。
 ///
 /// 自绘标题栏时把它铺在底层即可：
@@ -165,17 +88,11 @@ List<ImmersiveBlurBand> immersiveBlurBands(
 /// ]);
 /// ```
 ///
-/// ## 渐进模糊（从下到上越来越糊）
-///
-/// `ui.ImageFilter.blur` 的 σ 是常量、不支持纵向渐变，所以这里把标题栏横切成
-/// 一叠窄带、每条各给一个 σ（见 [immersiveBlurBands]）：顶部最糊，向下线性
-/// 衰减，最下面一条完全不糊。带够窄时相邻两条的 σ 只差一点点，肉眼看到的
-/// 就是一整片自下而上渐强的雾。
-///
-/// 代价是「一叠带 = 一叠模糊」。为了把代价压回来，所有横带共用同一个
-/// [BackdropKey]（[BackdropGroup] + [BackdropFilter.grouped]）：引擎只对
-/// backdrop 做**一次**取样再分给每条带，省掉十几次全屏回读。
-class ImmersiveGlassLayer extends StatefulWidget {
+/// 模糊只有一层、σ 恒定（见 [kImmersiveBlurSigma]），**整条一个强度**，
+/// 没有纵向渐变。想让「上糊下清」只能把标题栏横切成窄带、每条一个 σ，
+/// 而条带之间必然留缝（相邻带差一个 σ 就是约 2.5px 的扩散宽度差），
+/// 实机上能挑出横线 —— 已按用户要求放弃，改回整条统一模糊。
+class ImmersiveGlassLayer extends StatelessWidget {
   const ImmersiveGlassLayer({
     super.key,
     required this.progress,
@@ -189,42 +106,27 @@ class ImmersiveGlassLayer extends StatefulWidget {
   /// 是否启用毛玻璃。默认开着，四个平台一视同仁。
   ///
   /// 只有「看着像但不要真模糊」的场合才需要显式关掉（比如截图回归想要
-  /// 一眼稳定的像素），关掉后退化为加浓底色 + 顶部高光线。
+  /// 一眼稳定的像素），关掉后退化为半透明底色 + 顶部高光线。
   ///
   /// 早先这里有个「Web 上不支持 BackdropFilter」的平台开关，**那是误判**：
   /// 当时把「flexibleSpace 无界高度把模糊层撑到全屏」和「Web 引擎不裁剪」
   /// 两个 bug 混成了一个，一刀切掉 Web 的模糊。实测（见
-  /// `test/immersive_app_bar_test.dart` 的平台无关断言 + 逐行量边缘扩散）
-  /// CanvasKit 裁剪得好好的，Web 与 Android 的像素曲线几乎逐行重合。
+  /// `test/immersive_glass_blur_test.dart` 的像素断言）CanvasKit 裁剪得
+  /// 好好的，Web 与 Android 的像素结果基本一致。
   final bool blur;
-
-  @override
-  State<ImmersiveGlassLayer> createState() => _ImmersiveGlassLayerState();
-}
-
-class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
-  /// 所有横带共享的 backdrop key。
-  ///
-  /// **必须跨 rebuild 保持同一个实例**：每帧新建一个 key 就等于每帧换一个
-  /// 分组，引擎的「取样一次、共用给所有带」就白做了。
-  final BackdropKey _backdropKey = BackdropKey();
-
-  bool get _blurred => widget.blur;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final scheme = Theme.of(context).colorScheme;
 
     // 顶部内高光（网页版 --navbar-glass-highlight）。
     // 网页版还有一条底部分发丝线（--navbar-glass-hairline），这里不画：
-    // 底色已经向下淡出，下沿没有硬边要压，那条线只会把「内容从底下淡出来」
-    // 切成两截。
+    // 按用户要求去掉了，见文件头注释。
     final highlightColor =
         isDark ? const Color(0x0FFFFFFF) : const Color(0x2EFFFFFF); // .06 / .18
 
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: widget.progress.clamp(0.0, 1.0)),
+      tween: Tween<double>(begin: 0, end: progress.clamp(0.0, 1.0)),
       duration: kImmersiveTransition,
       curve: kImmersiveCurve,
       builder: (context, v, _) {
@@ -232,80 +134,50 @@ class _ImmersiveGlassLayerState extends State<ImmersiveGlassLayer> {
         // 连 readback 都不发生。
         if (v <= 0.01) return const SizedBox.expand();
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            // 父级高度有限才有「上下的概念」；拿不到就不铺模糊，只留底色细线。
-            final height = constraints.maxHeight;
-            return BackdropGroup(
-              backdropKey: _backdropKey,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // ① 渐进毛玻璃：一叠横带，自上而下 σ 递减
-                  if (_blurred) ..._blurBands(height, v),
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ① 整条毛玻璃：一层、一个 σ
+            if (blur) _glass(v),
 
-                  // ② 材质底色：card-bg 45%，向下淡出（网页版 color-mix 45%）
-                  _tint(scheme, v),
+            // ② 材质底色：取主题背景色铺 45%（网页版 color-mix 45%）
+            _tint(Theme.of(context).colorScheme, v),
 
-                  // ③ 顶部内高光细线（网页版 inset 0 1px 0）
-                  _line(kImmersiveHighlightKey, highlightColor, v),
-                ],
-              ),
-            );
-          },
+            // ③ 顶部内高光细线（网页版 inset 0 1px 0）
+            _line(kImmersiveHighlightKey, highlightColor, v),
+          ],
         );
       },
     );
   }
 
-  /// 一叠渐进模糊横带，σ 由 [immersiveBlurBands] 给出（顶部最大、底部为 0）。
+  /// 整条统一强度的毛玻璃。
   ///
-  /// 每条自带 [ClipRect]：BackdropFilter 默认作用于**整个父级裁剪区**，
-  /// 不裁的话每条带都会糊满整条标题栏。
-  List<Widget> _blurBands(double height, double v) {
-    return [
-      for (final band in immersiveBlurBands(height))
-        // σ 太小的带不值得起一次模糊（最下面那条本来就该是 0）
-        if (band.sigma * v > 0.05)
-          Positioned(
-            left: 0,
-            right: 0,
-            top: band.top,
-            height: band.height,
-            child: ClipRect(
-              child: BackdropFilter.grouped(
-                filter: ui.ImageFilter.blur(
-                  sigmaX: band.sigma * v,
-                  sigmaY: band.sigma * v,
-                ),
-                child: const SizedBox.expand(),
-              ),
-            ),
-          ),
-    ];
+  /// 必须自带 [ClipRect]：`BackdropFilter` 的作用范围是**当前裁剪区**，
+  /// 不裁的话会糊到标题栏外面去（当年「整页模糊」的一半原因就在这儿）。
+  Widget _glass(double v) {
+    final sigma = kImmersiveBlurSigma * v;
+    return Positioned.fill(
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
   }
 
-  /// 材质底色：上下渐变，顶部最浓（对齐网页版 `card-bg` 45%）、底部淡出。
+  /// 材质底色：整条铺同一层半透明背景色，对齐网页版 `card-bg` 45%。
   ///
-  /// 之所以不铺纯色：底下那截已经没有模糊了，底色要是还在，就会在标题栏
-  /// 下沿留下一条「到边就断」的硬边。底色跟着模糊一起淡，内容才算真的
-  /// 从标题栏底下长出来。
+  /// 取的是主题的 surface（明暗两套各自成立），不跟模糊一起做渐变 ——
+  /// 模糊已经不分层了，底色再分层就会上下看起来像两块不同的玻璃。
   Widget _tint(ColorScheme scheme, double v) {
-    const aTop = kImmersiveTintTop;
-    const aBottom = kImmersiveTintBottom;
     return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(
           key: kImmersiveTintKey,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                scheme.surface.withValues(alpha: aTop * v),
-                scheme.surface.withValues(alpha: aBottom * v),
-              ],
-            ),
+            color: scheme.surface.withValues(alpha: kImmersiveTintAlpha * v),
           ),
         ),
       ),

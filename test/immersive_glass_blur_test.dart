@@ -9,13 +9,13 @@ import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
 /// 把「模糊层对不对」钉在**真实光栅化结果**上。
 ///
-/// 结构断言（比如「铺了 N 个 BackdropFilter」）只能证明代码跑到了那一步，
-/// 证明不了「铺了但没糊」「糊到了标题栏外面」。这里改成：内容放一条竖直
-/// 黑白硬边，取图后逐行量这条边的**过渡宽度** —— 越糊越宽、一刀切为 0。
+/// 结构断言（「铺了 N 个 BackdropFilter」）只能证明代码跑到了那一步，证明不了
+/// 「铺了但没糊」「糊到了标题栏外面」。这里改成：内容放一条竖直黑白硬边，
+/// 取图后逐行量这条边的**过渡宽度** —— 越糊越宽、一刀切为 0。
 ///
 /// 于是三条不变量都能直接量出来：
-///   ① 条内自上而下越来越清（单调不增）；
-///   ② 贴着标题栏下沿必须已经几乎不糊；
+///   ① 标题栏内每一行都该是满糊（σ=20）；
+///   ② 整条上下一致 —— 一层、一个 σ，没有残留分带造成的强弱带；
 ///   ③ 条外必须是 0（一旦 > 0 就是「整页糊」的回归）。
 ///
 /// 原生（`flutter test`）与 Web（`--platform chrome`）跑同一套断言。
@@ -26,9 +26,9 @@ void main() {
   ///
   /// 返回 null = 这一行没有足够对比度（内容没铺到这儿），不算数。
   ///
-  /// 用线性插值找阈值穿越点，而不是数整数像素：低 σ 段的过渡只有十来像素，
-  /// 整数量化误差能到 ±1px，而相邻两带的真实差距只有 2.56·Δσ ≈ 2.5px ——
-  /// 不插值就等于在噪声里找信号。
+  /// 用线性插值找阈值穿越点，而不是数整数像素：整数量化误差能到 ±1px，
+  /// 而「有没有残留分带」要看的差异只有个位数像素 —— 不插值就等于在噪声里
+  /// 找信号。
   ///
   /// 清晰的一刀切在这里约等于 0.8（穿越点落在相邻两个像素之间），
   /// 所以「有没有糊」的判据是 > 2 左右，很好区分。
@@ -67,7 +67,7 @@ void main() {
     return (b - a).abs();
   }
 
-  testWidgets('滚动态：模糊从下到上逐渐增强，且一点都没糊到标题栏外面', (tester) async {
+  testWidgets('滚动态：整条统一模糊，且一点都没糊到标题栏外面', (tester) async {
     const statusBar = 60.0;
     const barHeight = 116; // = statusBar + kToolbarHeight（60 + 56）
     expect(barHeight, statusBar + kToolbarHeight);
@@ -143,67 +143,37 @@ void main() {
 
     (rgba, width) = await grab();
 
-    // ① 条内：自上而下单调变清（容差 3px 吸收测量抖动）
-    double? prev;
-    for (var y = 8; y < barHeight - 6; y += 4) {
+    // 逐行采样（跳过最顶上几行：那儿的模糊会取到状态栏区域的像素，
+    // 对比度天然变低、测出来偏小，属于测量边界而不是渲染问题）
+    final rows = <int, double>{};
+    for (var y = 12; y <= barHeight - 8; y += 4) {
       final w = edgeWidth(rgba, width, y);
-      expect(w, isNotNull, reason: '条内 y=$y 应该有可测的硬边');
-      if (prev != null) {
-        expect(w!, lessThanOrEqualTo(prev + 3),
-            reason: 'y=$y 的模糊不该比上一行更重（$w > $prev）');
-      }
-      prev = w;
+      if (w != null) rows[y] = w;
     }
+    expect(rows.length, greaterThanOrEqualTo(15),
+        reason: '标题栏内大部分行都该能量到硬边（实际 ${rows.length} 行）');
 
-    // ② 顶部满糊、贴着下沿已几乎不糊
-    final top = edgeWidth(rgba, width, 8)!;
-    final bottom = edgeWidth(rgba, width, barHeight - 6)!;
-    expect(top, greaterThanOrEqualTo(25), reason: '顶部该是满糊');
-    expect(bottom, lessThanOrEqualTo(4), reason: '标题栏下沿该基本不糊');
-    expect(top, greaterThan(bottom + 15), reason: '上下差别要看得出来');
+    final values = rows.values.toList();
+    final mn = values.reduce((a, b) => a < b ? a : b);
+    final mx = values.reduce((a, b) => a > b ? a : b);
+
+    // ① 真糊了：σ=20 时硬边的 10%→90% 过渡宽度在 30px 以上（实测 40~50）
+    expect(mn, greaterThanOrEqualTo(25),
+        reason: '最小过渡宽度 $mn，说明有地方没糊');
+
+    // ② 整条一致：上下任何两行都不该差出可见的量。
+    //
+    // 阈值 10：留足渲染后端的量化抖动（CanvasKit 与 Skia 的模糊实现略有差异，
+    // 8bit 量化在插值时会被放大，实测抖动 2~4px）。而一旦有人把横切分带加
+    // 回来，差 1 个 σ（≈2.5px）还能过，差到 6 个 σ（≈15px）就会挂 ——
+    // 那正是用户说的「割裂」。
+    expect(mx - mn, lessThanOrEqualTo(10),
+        reason: '整条模糊强度不均（$mn ~ $mx），像是残留了分带');
 
     // ③ 条外：必须一刀切。这里一旦出现扩散，就是「整页糊」回归了。
     for (final y in [barHeight + 8, barHeight + 40, barHeight + 120]) {
       expect(edgeWidth(rgba, width, y), lessThan(1.5),
           reason: '标题栏外面（y=$y）必须是清晰的一刀切');
-    }
-
-    // ④ 每条横带的接缝处不能「跳一下」。
-    //
-    // 这是「割裂感」的量化：带与带之间 σ 突变多少，相邻两条的模糊强度就差
-    // 多少，眼睛看到的就是一条横线。
-    //
-    // 判据取「带内逐行平均」而不是「接缝上下两行相减」：单行测量抖动大，
-    // 而相邻两带的真实差距只有 2.56·Δσ ≈ 2.5px —— 逐行相减等于在噪声里
-    // 找信号。带内平均把抖动摊掉，剩下的是这条带真正的模糊强度。
-    //
-    // 阈值 8：等步长（Δσ=1）时实测 2.5~5.4（CanvasKit 与 Skia 的模糊实现
-    // 略有差异；高 σ 段过渡平缓，8bit 量化在插值时被放大，所以留足余量）。
-    // 而曾经 σ>8 那段用 6 的粗步长，相邻带差到 15px 上下，一眼就是横线 ——
-    // 8 依然能把那次回退抓住。
-    //
-    // 「步长必须小」这条更精确的约束在 immersive_app_bar_test.dart 里直接对
-    // σ 阶梯断言（与渲染后端无关），这里只管「渲染出来真的看不出横线」。
-    final bands = immersiveBlurBands(barHeight.toDouble());
-    final means = <double>[];
-    for (final b in bands) {
-      final rows = <double>[];
-      for (var y = b.top.round() + 1; y < (b.top + b.height).round(); y++) {
-        final w = edgeWidth(rgba, width, y);
-        if (w != null) rows.add(w);
-      }
-      if (rows.isEmpty) continue;
-      means.add(rows.reduce((a, b) => a + b) / rows.length);
-    }
-    expect(means.length, greaterThanOrEqualTo(16),
-        reason: '大部分横带都该能量到（实际 ${means.length} 条）');
-    for (var i = 1; i < means.length; i++) {
-      expect(
-        (means[i] - means[i - 1]).abs(),
-        lessThanOrEqualTo(8),
-        reason: '第 $i 条横带与上一条的模糊强度差太多'
-            '（${means[i - 1].toStringAsFixed(1)} → ${means[i].toStringAsFixed(1)}），会看出横线',
-      );
     }
   });
 }

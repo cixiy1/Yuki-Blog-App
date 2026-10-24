@@ -26,17 +26,12 @@ class _FakeMetrics implements ScrollMetrics {
 }
 
 void main() {
-  /// 滚动态该有的模糊横带数 —— 一叠带（渐进模糊），不是「一个」。
-  ///
-  /// 测试视口里没有状态栏内边距，标题栏正好 [kToolbarHeight] 高，
-  /// 所以直接拿理论分带数当期望值。
+  /// 滚动态该有的模糊层 —— **只有一层**（整条统一模糊，不再分带）。
   ///
   /// **四个平台一视同仁**：早先这里按 `blurSupported` 分支，Web 上断言
   /// 「没有 BackdropFilter」——那是误判（把 flexibleSpace 无界高度和引擎
-  /// 裁剪混成了一个 bug）。逐行量边缘扩散的实测里，CanvasKit 与原生曲线
-  /// 几乎逐行重合，所以 Web 也走整套配方。
-  final Matcher showsBlur =
-      findsAtLeastNWidgets(immersiveBlurBands(kToolbarHeight).length);
+  /// 裁剪混成了一个 bug）。所以 Web 也走整套配方。
+  final Matcher showsBlur = findsOneWidget;
 
   /// 把标题栏塞进一个真实 Scaffold，行为才与线上一致。
   Widget wrap(
@@ -74,86 +69,9 @@ void main() {
     return opacity.opacity;
   }
 
-  /// 取材质底色渐变的两个端点透明度（顶部、底部）。
-  List<double> tintAlphas(WidgetTester tester) {
-    final box = tester.widget<DecoratedBox>(find.byKey(kImmersiveTintKey));
-    final gradient = (box.decoration as BoxDecoration).gradient! as LinearGradient;
-    return [for (final c in gradient.colors) c.a];
-  }
-
-  /// 取当前所有模糊横带的位置（按自上而下的绘制顺序）。
-  List<Rect> bandRects(WidgetTester tester) {
-    final finder = find.byType(BackdropFilter);
-    final n = tester.widgetList(finder).length;
-    return [for (var i = 0; i < n; i++) tester.getRect(finder.at(i))];
-  }
-
-  // ── 渐进模糊分带 ──────────────────────────────────────────────────────
-  group('immersiveBlurBands 渐进分带', () {
-    test('顶部最糊、底部趋近 0，自上而下单调递减', () {
-      final bands = immersiveBlurBands(103);
-
-      // 顶上那条的 σ 取的是带中点处的值，所以略小于上限
-      expect(bands.first.sigma, closeTo(kImmersiveBlurSigma, 1));
-      expect(bands.last.sigma, lessThan(1));
-      for (var i = 1; i < bands.length; i++) {
-        expect(bands[i].sigma, lessThan(bands[i - 1].sigma));
-      }
-    });
-
-    test('横带严丝合缝盖满整条标题栏（不重叠、不留缝）', () {
-      for (final height in <double>[56, 103, 103.5, 240]) {
-        final bands = immersiveBlurBands(height);
-
-        expect(bands.first.top, 0, reason: 'height=$height');
-        expect(bands.last.top + bands.last.height, height,
-            reason: 'height=$height');
-        for (var i = 0; i < bands.length; i++) {
-          expect(bands[i].height, greaterThan(0), reason: 'height=$height');
-          if (i > 0) {
-            expect(bands[i].top, bands[i - 1].top + bands[i - 1].height,
-                reason: 'height=$height');
-          }
-        }
-      }
-    });
-
-    test('相邻两带的 σ 差距足够小 —— 这是「割裂感」的唯一来源', () {
-      // 曾经 σ>8 那段用 6 的步长（省开销），结果每条缝差出十几像素的扩散
-      // 宽度，肉眼能从雾里挑出一条条横线。这里把「步长」钉死：相邻带的 σ
-      // 差不得超过一个 kImmersiveSigmaStep（留一点容差给整数像素对齐）。
-      for (final height in <double>[56, 103, 103.5, 140, 240]) {
-        final bands = immersiveBlurBands(height);
-        for (var i = 1; i < bands.length; i++) {
-          expect(
-            bands[i - 1].sigma - bands[i].sigma,
-            lessThanOrEqualTo(kImmersiveSigmaStep * 1.5),
-            reason: 'height=$height 第 $i 条带与上一条差得太多，会看出横线',
-          );
-        }
-      }
-    });
-
-    test('条数由 σ 上限 / 步长决定，并被上限兜住', () {
-      // 20 / 1 → 20 条带（σ 从 20 落到 0，共 20 个区间）
-      expect(
-        immersiveBlurBands(103).length,
-        (kImmersiveBlurSigma / kImmersiveSigmaStep).round(),
-      );
-      // 步长再小也不会切出超过上限的条数
-      expect(immersiveBlurBands(103, step: 0.1).length,
-          lessThanOrEqualTo(kImmersiveMaxBands));
-    });
-
-    test('带数只看「占整条多少」，与标题栏高度无关', () {
-      expect(immersiveBlurBands(56).length, immersiveBlurBands(206).length);
-    });
-
-    test('拿不到有限高度就不分带（宁可没模糊，也不糊全屏）', () {
-      expect(immersiveBlurBands(0), isEmpty);
-      expect(immersiveBlurBands(double.infinity), isEmpty);
-    });
-  });
+  /// 取模糊层的矩形（整条只有一层）。
+  Rect glassRect(WidgetTester tester) =>
+      tester.getRect(find.byType(BackdropFilter));
 
   // ── 进度换算 ──────────────────────────────────────────────────────────
   group('immersiveProgressOf 滚动阈值', () {
@@ -238,38 +156,33 @@ void main() {
       expect(find.byKey(kImmersiveHighlightKey), findsOneWidget);
     });
 
-    testWidgets('模糊层是一叠横带，只盖满标题栏、不糊全屏', (tester) async {
+    testWidgets('模糊层只有一层，严格盖满标题栏、不糊全屏', (tester) async {
       // 回归：AppBar.flexibleSpace 挂在 OverflowBox(maxHeight: infinity) 下，
       // 不限高时 BackdropFilter 会被撑到全屏 → 用户看到「全屏模糊」。
-      // 现在模糊层是若干条带，同样必须严格贴在这条标题栏的高度里。
+      // 现在整条只有一层模糊，同样必须严格贴在这条标题栏的高度里。
       await tester.pumpWidget(wrap(bar(1)));
       await tester.pumpAndSettle();
 
-      final rects = bandRects(tester);
       final screenHeight =
           tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      final rect = glassRect(tester);
 
-      expect(rects.length, immersiveBlurBands(kToolbarHeight).length);
-      expect(rects.first.top, 0); // 顶上那条贴屏幕最上沿
-      expect(rects.last.bottom, kToolbarHeight); // 底下那条到标题栏下沿为止
+      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(rect.top, 0); // 贴屏幕最上沿
+      expect(rect.bottom, kToolbarHeight); // 到标题栏下沿为止，底部不留没糊的一线
       expect(kToolbarHeight, lessThan(screenHeight)); // 就是没糊到全屏
-      for (var i = 0; i < rects.length; i++) {
-        expect(rects[i].height, greaterThan(0));
-        // 相邻两条首尾相接：不重叠（模糊会叠一层）、不留缝（会露出没糊的一线）
-        if (i > 0) expect(rects[i].top, rects[i - 1].bottom);
-      }
     });
 
-    testWidgets('底色上下渐变：顶部最浓、底部淡出（下沿不留硬边）', (tester) async {
+    testWidgets('底色是整条统一的半透明背景色（不再上下渐变）', (tester) async {
       await tester.pumpWidget(wrap(bar(1)));
       await tester.pumpAndSettle();
 
-      final alphas = tintAlphas(tester);
-      // 底色跟着模糊一起淡：底下那截已经不清了，底色要是还在，
-      // 就会在标题栏下沿留下一条「到边就断」的硬边。
-      expect(alphas.first, closeTo(kImmersiveTintTop, 0.001));
-      expect(alphas.last, closeTo(kImmersiveTintBottom, 0.001));
-      expect(alphas.first, greaterThan(alphas.last));
+      final decoration = (tester
+              .widget<DecoratedBox>(find.byKey(kImmersiveTintKey))
+              .decoration) as BoxDecoration;
+
+      expect(decoration.gradient, isNull, reason: '模糊不再分层，底色也不该渐变');
+      expect(decoration.color!.a, closeTo(kImmersiveTintAlpha, 0.001));
     });
 
     testWidgets('标题栏高度 = 工具栏行（不含状态栏内边距时）', (tester) async {

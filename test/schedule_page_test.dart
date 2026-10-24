@@ -13,7 +13,6 @@ import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_detail_panel.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
-import 'package:yuki_blog_app/widgets/immersive_app_bar.dart';
 import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
 void main() {
@@ -251,10 +250,7 @@ void main() {
     expect(tester.getTopLeft(find.text('软件2615')).dy, lessThan(kToolbarHeight));
 
     await tester.pumpAndSettle();
-    // 渐进模糊 = 一叠横带，所以这里查的是「有一组」而不是「有一个」
-    expect(
-      find.byType(BackdropFilter),
-      findsAtLeastNWidgets(immersiveBlurBands(kToolbarHeight).length),
-    );
+    // 整条统一模糊：只有一层（分带写法已废）
+    expect(find.byType(BackdropFilter), findsOneWidget);
   });
 }
