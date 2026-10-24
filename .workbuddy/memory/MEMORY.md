@@ -25,15 +25,14 @@
 
 ## 4. 沉浸标题栏（公共组件）
 `lib/widgets/immersive_app_bar.dart`（`ImmersiveGlassLayer` 材质层 / `ImmersiveAppBar implements PreferredSizeWidget` / `immersiveProgressOf` / `immersiveBlurBands` / `kImmersive*` 常量与 Key）+ `lib/widgets/immersive_scaffold.dart`（`ImmersiveScaffold` 骨架：抽屉 / 滚动监听 / 路由切换复位）。
-配方照网页版 Firefly semifull：贴顶全透明 → 滚动过 **50px** → `card-bg 45%` + `blur(20px)` + **仅顶端**一条高光阴影线（不是 border；**底发丝线 2026-10-19 已按要求永久删除**，`kImmersiveHairlineKey` 已删——底色本就向下淡出，下沿无硬边可压，那条线反而把过渡切成两截），过渡 **360ms `Cubic(0.22,1,0.36,1)`**，进度**二值化**（不跟手）。
+配方照网页版 Firefly semifull：贴顶全透明 → 滚动过 **50px** → `card-bg 45%` + 整条 `blur(20px)` + **仅顶端**一条高光阴影线（不是 border；**底发丝线 2026-10-19 已按要求永久删除**，`kImmersiveHairlineKey` 已删），过渡 **360ms `Cubic(0.22,1,0.36,1)`**，进度**二值化**（不跟手）。
 - ① 别用 `Scaffold.appBar` + `AppBar.flexibleSpace` 承载铺满型内容：flexibleSpace 挂在 `OverflowBox(maxHeight: infinity)` 下，`StackFit.expand`/`Positioned.fill` 会拿到无界高度，`BackdropFilter` 被撑到全屏。自己实现 `PreferredSizeWidget` + `SizedBox(height: kToolbarHeight + 状态栏高)` 钉死。
 - ② **Web 端不需要关模糊（2026-10-17 推翻旧结论）**：当年以为「Web 引擎不裁剪 BackdropFilter」，加了 `blurSupported = !kIsWeb`；实测 CanvasKit 裁剪正常、像素曲线与原生逐行重合，整页糊的真凶是 ①。**教训：别把「修完 A 之后症状也消失」当成「B 也确认是 bug」**。现在四端无平台分支。Web 断言用 `flutter test --platform chrome <用例>`（无需 dev server）。
 - ③ 玻璃要看得见，内容必须从标题栏底下穿过：`ImmersiveScaffold` 默认 `extendBodyBehindAppBar: true`，但挂 appBar 会把 body 的 `MediaQuery.padding.top` 清成 0 → 组件自己补回；`ListView`/`GridView` 只在 `padding == null` 时自动套（写死 padding 的页面要自己加 `MediaQuery.paddingOf(context).top`），根部 `SafeArea` 必须 `top: false`。
-- ④ 渐进模糊：`ImageFilter.blur` 的 σ 是常量，**没有纵向渐变滤镜**；`ShaderMask`/`Opacity` 包 `BackdropFilter` 会引入 saveLayer → backdrop 取不到样、模糊消失。唯一解：**横切成条带、每条一个 σ**，`σ(y)=σ_max·(1-y/h)`，σ_max=20，边界按整数像素对齐、首尾相接（重叠＝叠加，留缝＝露线），最下条 σ=0，σ 取该带垂直中点值。
-  - **必须全程等步长 `kImmersiveSigmaStep = 1`（现切 20 条）**。曾为省开销把 σ>8 段步长放大到 6，实测接缝差 15px、肉眼见横线（用户原话「模糊割裂太严重」）。规律：**过渡宽度 ≈ 2.56·σ**，Δσ=1→差 2.5px（看不出），Δσ=6→15px（一眼横线）。
-  - 底色跟着模糊一起淡（顶 0.45 → 底 0.10），否则下截不糊处还盖着底色，像玻璃坏了。
-  - 所有横带共用一个 `BackdropKey`（`BackdropGroup` + `BackdropFilter.grouped`）；`ImmersiveGlassLayer` 必须 Stateful 且 key 跨 rebuild 保持同一实例。
-  - 目检：临时用例 `matchesGoldenFile` + `--update-goldens` 出 PNG，Pillow 逐行量竖直黑白硬边扩散宽度反推 σ（阈值穿越点要**亚像素插值**；判接缝用带内逐行均值，别拿接缝上下两行相减）。已固化成 `test/blur_gradient_test.dart`（原生+Chrome 双跑，断言：条内单调变清 / 顶部满糊下沿几乎不糊 / 条外一刀切 / 相邻带差 ≤8px）。标题文字落在距条顶约 73% 处（σ≈5），σ(y) 别调得过凸。
+- ④ **模糊是整条统一的**（2026-10-24 起）：一层 `BackdropFilter`、σ=20，配一层 45% 主题 `surface` 底色，与网页版 `backdrop-filter: blur(20px)` + `card-bg 45%` 一一对应。`ImmersiveGlassLayer` 已改 **Stateless**，不再需要 `BackdropGroup`/`BackdropKey`（只有一层，引擎本来只取样一次）。
+  - **废弃：渐进模糊**。曾把标题栏横切成 20 条带、σ 自上而下从 20 递减到 0，让内容「淡出来」。但 `ImageFilter.blur` 的 σ 是常量，只能靠分带逼近，条与条之间必然有接缝：**过渡宽度 ≈ 2.56·σ**，Δσ=1 差约 2.5px（看不出），Δσ=6 差 15px（一眼横线）。用户两次反馈「割裂太严重」，最终要求整条统一。**以后别再自作聪明加回来**。
+  - 若真要重做：所有横带共用一个 `BackdropKey`；`ShaderMask`/`Opacity` 包 `BackdropFilter` 会引入 saveLayer → backdrop 取不到样、模糊消失，这条路走不通。
+  - 目检/回归：`test/immersive_glass_blur_test.dart`（原生 + Chrome 双跑）用竖直黑白硬边量 10%→90% 过渡宽度（**阈值穿越点亚像素插值**），断言：标题栏内每行都满糊 / 上下差 ≤10px / 条外一刀切。结构断言在 `test/immersive_app_bar_test.dart`。
 - 左侧按钮取用顺序：`leading` > `onMenu` > Scaffold 抽屉 > 返回键；开抽屉用 `GlobalKey<ScaffoldState>`，**别在创建 Scaffold 的 context 上调 `Scaffold.of`**。
 
 ## 5. 课表双端同步（改一处必须改两处）
