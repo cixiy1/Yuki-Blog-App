@@ -58,3 +58,11 @@ App 与博客 yiyu14.top 各一套实现，必须对齐：
 - `open_file_plus` 不可用（2026-10-24 实测）：3.4.1+1（2024-03 停更）Android 端还在用 `PluginRegistry.Registrar`，Flutter 3.47 已删该类 → 编译失败。**别再换回 open_file_plus**；`open_filex` 正常（本项目已用 5.0.0）。
 - 别手动删 Flutter SDK 的 `flutter_tools/gradle/build/kotlin/compileKotlin/classpath-snapshot` 再跑 `android/gradlew`：会用 PATH 上 JDK 27 重编 `:gradle`，报 `Unsupported class file major version 71`。验证 Android 编译一律走 `flutter build apk`。
 - `.widget_preview/`（Flutter Widget Preview 脚手架）写死绝对路径：项目搬到 `~/Documents/gdmec/projects/2615/myclass` 后，`pubspec.yaml`（`dependency_overrides` 的 path）、`pubspec.lock`、`preview_manifest.json`、`lib/src/dtd/dtd_connection_info.dart` 四处仍是旧路径 → IDE 报 `could not find package myclass ...`（exit 66）。改这四处 + 删 `.dart_tool`/`build` + 重跑 `flutter pub get --no-example`。**`dependency_overrides` 的键必须是包名 `yuki_blog_app`，不能是目录名 `myclass`**。该目录被 gitignore。
+
+## 8. 性能与滚动基准
+- **课表页滚动卡顿（2026-10-24 已修）**：三个成因叠加 —— ① `ListView` 默认 `cacheExtent` 只有 250，滑两屏就把课表网格回收，滑回来重建整张网格 + 后面所有面板，单帧 build 30~110ms；② `buildKeywordSpans` 每次重建都从头跑「剥标注 → 词表正则 → 分句 → 逐句打分」，二十多条更新历叠起来很可观；③ 更新历每行套 `IntrinsicHeight`，每行 layout 两遍。修法：`scrollCacheExtent: ScrollCacheExtent.pixels(800)`、高亮结果按 `(content, isDark, tiered, baseStyle)` 缓存（`InlineSpan` 不可变可复用，上限 256 条 FIFO）、色条改 `Stack` + `Positioned(top/bottom)` 拉伸（`StackFit.passthrough` 保宽度）。
+- API 变更（Flutter 3.47）：`ListView.cacheExtent` 已弃用 → `scrollCacheExtent`，类型是 `ScrollCacheExtent.pixels(n)`，**`material.dart` 不导出**，要 `import 'package:flutter/rendering.dart' show ScrollCacheExtent;`。
+- 基准跑法（只有 profile 数据有意义；`flutter test integration_test/...` 不支持 `--profile`，必须走 drive）：
+  `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`
+  结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。
+- 基线（macOS profile，滚动 6 个来回）：修前 build 均 1.63 / 最差 109.7ms（6 帧超预算）、raster 均 3.10 / 最差 44.1ms；修后 build 均 0.24 / 最差 2.5ms（0 帧超预算）、raster 均 1.36 / 最差 8.8ms。**回归时先看「build 超预算帧数」是否为 0**。
