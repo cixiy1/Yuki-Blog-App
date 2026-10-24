@@ -42,12 +42,19 @@ void main() {
   testWidgets('动态课程表首屏渲染', (tester) async {
     await pumpTall(tester, wrapApp());
 
-    // 头部 / 周条 / 通知 / 图例 / 本周调整
+    // 头部 / 周条 / 本周调整 / 通知 / 图例
     expect(find.text('软件2615'), findsOneWidget);
     expect(find.text('第 $realWeek 周'), findsOneWidget);
     expect(find.text('通知'), findsOneWidget);
     expect(find.text('有课'), findsWidgets); // 图例
     expect(find.text('本周调整'), findsOneWidget);
+
+    // 面板顺序对齐网页版：本周调整紧跟课表网格，排在通知之上。
+    expect(
+      tester.getTopLeft(find.text('本周调整')).dy,
+      lessThan(tester.getTopLeft(find.text('通知')).dy),
+      reason: '「本周调整」应在「通知」上方',
+    );
 
     // 表头：只渲染**有课的星期列**（resolver 的 days =「数据里出现过的
     // 星期」∪「本周有条目的星期」，2615 班没有周六日的课），所以断言必须

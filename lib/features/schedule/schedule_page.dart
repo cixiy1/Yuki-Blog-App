@@ -192,6 +192,13 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           selectedKey: _selectedKey,
           onSelectEntry: _selectEntry,
         ),
+        // 「本周调整」紧跟课表网格，排在通知之上：本周到底哪节课变了，比
+        // 通知更该先看到。顺序对齐网页版（`#tt-grid` → `#tt-changes` →
+        // 图例 → 通知面板 → 数据更新历）。
+        if (schedule.changes.isNotEmpty) ...[
+          const SizedBox(height: AppTheme.spacingMd),
+          WeekChangesPanel(changes: schedule.changes),
+        ],
         const SizedBox(height: AppTheme.spacingMd),
         // 通知栏置于课表网格之下（与网页版布局一致）
         NoticesPanel(notices: notices),
@@ -202,10 +209,6 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
             entry: selected,
             onClose: () => setState(() => _selectedKey = null),
           ),
-        ],
-        if (schedule.changes.isNotEmpty) ...[
-          const SizedBox(height: AppTheme.spacingMd),
-          WeekChangesPanel(changes: schedule.changes),
         ],
         const SizedBox(height: AppTheme.spacingMd),
         ChangelogPanel(meta: meta),
