@@ -2,7 +2,7 @@
 
 ## 1. 标识与发版
 - 仓库/工程名 **Yuki-Blog App**，显示名 **Yuki Blog**（全英），Dart 包 `yuki_blog_app`；仓库 `cixiy1/Yuki-Blog-App`（**公开**，班级个人材料 `/材料/` 已 gitignore，新增同类材料先确认被忽略，别 `git add -A` 误推）。
-- 应用 ID：Android/macOS `com.yiyu14.yuki_blog_app`，**iOS `com.yiyu14.yukiblogapp`**（Apple 不许下划线，旧值报 `attribute 'name' is invalid: 'XC com yiyu14 yuki_blog_app'`）。改标识要四处同步：android namespace/applicationId/源码目录/Manifest、iOS `PRODUCT_BUNDLE_IDENTIFIER`+`PRODUCT_NAME`（连带 pbxproj `TEST_HOST`、xcscheme `BuildableName`）、macOS `AppInfo.xcconfig`、web `manifest.json`/`index.html`。**iOS 那个斜杠别顺手"统一"回下划线版**。
+- 应用 ID：Android `com.yiyu14.yuki_blog_app`；**Apple 两端（iOS 与 macOS）都是 `com.yiyu14.yukiblogapp`** —— Bundle ID 是 UTI，只允许字母/数字/连字符/点，带下划线会报 `invalid character in Bundle Identifier`（macOS 构建警告）或 `attribute 'name' is invalid: 'XC com yiyu14 yuki_blog_app'`（iOS 签名）。改标识要四处同步：android namespace/applicationId/源码目录/Manifest、iOS `PRODUCT_BUNDLE_IDENTIFIER`+`PRODUCT_NAME`（连带 pbxproj `TEST_HOST`、xcscheme `BuildableName`）、macOS `AppInfo.xcconfig`（含 pbxproj 里 RunnerTests 的后缀）、web `manifest.json`/`index.html`。**别把 iOS/macOS 的顺手"统一"回下划线版**。
 - 发版：改 `pubspec.yaml` version → Conventional Commits 推送 → `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions 自动测试+构建+发 Release，App 内更新弹窗读该 Release。
 - 命名铁律：不要中英文夹杂。
 
