@@ -63,7 +63,7 @@ App 与博客 yiyu14.top 各一套实现，必须对齐：
 ## 8. 性能与滚动基准
 - **课表页滚动卡顿（2026-10-24 已修）**：三个成因叠加 —— ① `ListView` 默认 `cacheExtent` 只有 250，滑两屏就把课表网格回收，滑回来重建整张网格 + 后面所有面板，单帧 build 30~110ms；② `buildKeywordSpans` 每次重建都从头跑「剥标注 → 词表正则 → 分句 → 逐句打分」，二十多条更新历叠起来很可观；③ 更新历每行套 `IntrinsicHeight`，每行 layout 两遍。修法：`scrollCacheExtent: ScrollCacheExtent.pixels(800)`、高亮结果按 `(content, isDark, tiered, baseStyle)` 缓存（`InlineSpan` 不可变可复用，上限 256 条 FIFO）、色条改 `Stack` + `Positioned(top/bottom)` 拉伸（`StackFit.passthrough` 保宽度）。
 - API 变更（Flutter 3.47）：`ListView.cacheExtent` 已弃用 → `scrollCacheExtent`，类型是 `ScrollCacheExtent.pixels(n)`，**`material.dart` 不导出**，要 `import 'package:flutter/rendering.dart' show ScrollCacheExtent;`。
-- 基准跑法（只有 profile 数据有意义；`flutter test integration_test/...` 不支持 `--profile`，必须走 drive）：
-  `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`
+- **禁止「滚动页里嵌限高滚动框」**（2026-10-24 修）：浏览器会把滚到头的滚动链式传给父级，Flutter 不会 —— `pointerSignalResolver` 只交给一个命中者，内层注册在先就赢；光标停在框上页面彻底滚不动（实测量法：`TestPointer(kind: trackpad)` + `pointer.scroll`）。课程表页的「数据更新历」已由「限高 320 + 内滚动」改为**默认只建最新 4 条 + 展开全部**（`ChangelogPanel.collapsedCount`）。以后任何长列表面板都按这个来，别照搬网页版。
+- 基准跑法（只有 profile 数据有意义；`flutter test integration_test/...` 不支持 `--profile`，必须走 drive）：  `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`
   结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。
 - 基线（macOS profile，滚动 6 个来回）：修前 build 均 1.63 / 最差 109.7ms（6 帧超预算）、raster 均 3.10 / 最差 44.1ms；修后 build 均 0.24 / 最差 2.5ms（0 帧超预算）、raster 均 1.36 / 最差 8.8ms。**回归时先看「build 超预算帧数」是否为 0**。
