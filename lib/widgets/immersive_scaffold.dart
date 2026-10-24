@@ -9,7 +9,8 @@ import 'package:yuki_blog_app/widgets/immersive_app_bar.dart';
 /// 2. 标题栏换成 [ImmersiveAppBar]（贴顶全透明，滚动后渐显毛玻璃，**只糊标题栏那一条**）；
 /// 3. **内容从标题栏底下穿过**（默认 `extendBodyBehindAppBar: true`）——
 ///    这是玻璃效果能看得见的前提，否则模糊层糊到的只是一片纯背景色；
-/// 4. 监听 body 的滚动，换算成标题栏折叠进度（二值，50px 阈值）；
+/// 4. 监听 body 的**页面级**滚动，换算成标题栏折叠进度（二值，50px 阈值）；
+///    页面内嵌的滚动组件（更新历列表、课程表横向滚动）不参与换算；
 /// 5. body 换实例时自动把标题栏收回贴顶态（避免上一页的滚动状态带过来）。
 ///
 /// ```dart
@@ -114,7 +115,17 @@ class _ImmersiveScaffoldState extends State<ImmersiveScaffold> {
 
   /// 页面滚动 → 标题栏折叠进度（二值，对齐网页版 scrollTop > 50）。
   /// 返回 false 让通知继续冒泡。
+  ///
+  /// **只认页面自己那个滚动视图**（`depth == 0`）。页面里嵌的可滚动组件——
+  /// 数据更新历内层的 `SingleChildScrollView`、课程表的横向滚动——它们的
+  /// `metrics.pixels` 是自己内部的位移，跟页面滚没滚毫无关系。之前没做这层
+  /// 过滤，拖一下更新历列表（内层滚过 50px）标题栏就糊上了，往回拖又糊然
+  /// 消失，看着像顶部模糊被列表带着抖。
+  ///
+  /// `depth` 是「这条通知往上穿过了几层 viewport」，页面级滚动恒为 0，
+  /// 内层滚动的通知穿过外层 ListView 的 viewport 后至少是 1。
   bool _onScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
     if (notification is ScrollUpdateNotification) {
       final t = immersiveProgressOf(notification.metrics);
       if (t != _progress.value) _progress.value = t;

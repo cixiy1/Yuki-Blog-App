@@ -319,6 +319,86 @@ void main() {
       expect(find.byType(BackdropFilter), showsBlur);
     });
 
+    testWidgets('页面内嵌的可滚动组件不参与折叠进度（更新历 / 课表网格回归）',
+        (tester) async {
+      // 回归：NotificationListener<ScrollNotification> 会收到页面里**所有**
+      // 滚动视图冒泡上来的通知。更新历面板内层的 SingleChildScrollView、
+      // 课程表的横向滚动，它们的 pixels 是自己内部的位移 —— 之前拿它们算
+      // 进度，拖一下更新历列表标题栏就糊上了，往回拖又糊然消失。
+      //
+      // 视口 800x600，内容高度略超过一屏（滚动余量 116），保证页内滚一点
+      // 之后两个内层滚动组件仍在屏内。
+      Widget nestedPage() => MaterialApp(
+            theme: ThemeData.light(useMaterial3: true),
+            home: ImmersiveScaffold(
+              title: '动态课程表',
+              body: ListView(
+                children: [
+                  // 数据更新历：定高 + 内层纵向滚动
+                  SizedBox(
+                    height: 240,
+                    child: SingleChildScrollView(
+                      key: const Key('changelog-list'),
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < 30; i++)
+                            SizedBox(height: 40, child: Text('更新 $i')),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // 课程表：横向滚动
+                  SizedBox(
+                    height: 120,
+                    child: SingleChildScrollView(
+                      key: const Key('grid-horizontal'),
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < 30; i++)
+                            SizedBox(
+                                width: 100, height: 120, child: Text('格 $i')),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // 只是把内容撑得比一屏高一点，留出页面级滚动余量
+                  const SizedBox(height: 300),
+                ],
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(nestedPage());
+      expect(find.byType(BackdropFilter), findsNothing);
+
+      // ① 拖更新历内层列表：页面本身没动，标题栏不该出玻璃
+      await tester
+          .drag(find.byKey(const Key('changelog-list')), const Offset(0, -100));
+      await tester.pumpAndSettle();
+      expect(find.byType(BackdropFilter), findsNothing,
+          reason: '拖更新历列表不该让标题栏出现模糊');
+
+      // ② 横向拖课程表：同理
+      await tester.drag(
+          find.byKey(const Key('grid-horizontal')), const Offset(-200, 0));
+      await tester.pumpAndSettle();
+      expect(find.byType(BackdropFilter), findsNothing,
+          reason: '横向拖网格不该让标题栏出现模糊');
+
+      // ③ 页面自己滚过 50px → 该出玻璃（从底部空白处拖，避开内层滚动）
+      await tester.dragFrom(const Offset(400, 520), const Offset(0, -100));
+      await tester.pumpAndSettle();
+      expect(find.byType(BackdropFilter), findsOneWidget);
+
+      // ④ 页面已滚动，再把更新历列表拖回顶部：模糊不能被收掉
+      await tester
+          .drag(find.byKey(const Key('changelog-list')), const Offset(0, 100));
+      await tester.pumpAndSettle();
+      expect(find.byType(BackdropFilter), findsOneWidget,
+          reason: '内层列表回滚不该收掉标题栏模糊');
+    });
+
     testWidgets('关掉穿透时退回普通布局：内容从标题栏下沿开始', (tester) async {
       await tester.pumpWidget(page(extendBodyBehindAppBar: false));
 
