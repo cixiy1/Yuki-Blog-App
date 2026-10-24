@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:yuki_blog_app/app/theme.dart';
 import 'package:yuki_blog_app/core/network_timetable_repository.dart';
 import 'package:yuki_blog_app/core/timetable_repository.dart';
@@ -152,6 +153,11 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
     }
 
     return ListView(
+      // 默认 cacheExtent（250）对这张长页面太小：往下滑两屏，上面的课表网格
+      // 就被回收，再滑回来要重建整张网格（四十来个格子）连同后面的面板，
+      // 实测重建一次 30~100ms，手一滑就顿一下。整页内容总共也就两千多像素，
+      // 留 800 的缓存区基本能让它们全程常驻，滚动不再触发重建。
+      scrollCacheExtent: const ScrollCacheExtent.pixels(800),
       padding: EdgeInsets.fromLTRB(
         AppTheme.spacingMd,
         // 标题栏悬浮在内容之上，这段留白让首屏内容避开它（值是

@@ -210,88 +210,95 @@ class _ChangelogRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             )
           : null,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 左侧彩色条
-            Container(
-              width: 4,
-              margin: const EdgeInsets.symmetric(vertical: 2),
+      // 左侧色条用 Stack + Positioned 拉伸，**不用 IntrinsicHeight**：
+      // IntrinsicHeight 会让每行 layout 两遍（先量固有高度再真正布一次），
+      // 更新历十几二十行叠起来就是可观的滚动开销。Positioned 的 top/bottom
+      // 直接按 Stack 高度拉伸，效果一样，只布一次。
+      // fit: passthrough 让内容拿到父级的紧宽度约束，否则 Column 会缩到最宽
+      // 子项的宽度、正文提前换行。
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 上行：日期徽章 + 最新角标
+                Row(
+                  children: [
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        entry.date,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                          fontFeatures: const [
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (isLatest) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '最新',
+                          style: TextStyle(
+                            fontSize: 10,
+                            height: 1.6,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 5),
+                // 下行：关键词高亮正文
+                Text.rich(
+                  TextSpan(
+                    children: buildKeywordSpans(
+                      entry.content,
+                      TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: scheme.onSurface,
+                      ),
+                      isDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 左侧彩色条（贴在 padding 内容区的最左边，上下各留 2px）
+          Positioned(
+            left: 0,
+            top: 2,
+            bottom: 2,
+            width: 4,
+            child: DecoratedBox(
               decoration: BoxDecoration(
                 color: color,
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 上行：日期徽章 + 最新角标
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          entry.date,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: color,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures(),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (isLatest) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 5),
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            '最新',
-                            style: TextStyle(
-                              fontSize: 10,
-                              height: 1.6,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  // 下行：关键词高亮正文
-                  Text.rich(
-                    TextSpan(
-                      children: buildKeywordSpans(
-                        entry.content,
-                        TextStyle(
-                          fontSize: 12,
-                          height: 1.5,
-                          color: scheme.onSurface,
-                        ),
-                        isDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

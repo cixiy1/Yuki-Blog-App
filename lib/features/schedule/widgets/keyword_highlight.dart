@@ -727,7 +727,40 @@ WidgetSpan _coreMarker(bool isDark) => WidgetSpan(
 /// 不因档位加粗，只做词表着色。用于「本周调整」这类**运行时拼出来的文案**
 /// （`「课程名」+ 调整说明`，不是整段原文，无法内联人工标注）：那里的每一行
 /// 本身就已是「这周要处理的事」，再叠档位底纹只会让整块列表变成一片花黄。
+/// 切分结果缓存。
+///
+/// 这套切分要跑「剥标注 → 全词表正则扫描 → 分句 → 逐句打分」四步，一段
+/// 上百字的通知单次就要几百微秒。而课表页的文案是**静态**的：更新历、
+/// 通知、课程说明滚动时反复进出视口，`ListView` 每回收重建一次就把这些
+/// 全量重算一遍 —— 实测构建尖峰能到 30~100ms，手一滑滚回来就卡一下。
+///
+/// `InlineSpan` / `TextSpan` 都是不可变的，同一份结果可以安全地给多个
+/// `Text.rich` 复用，所以按「文本 + 主题 + 是否定档 + 基础样式」缓存即可。
+/// 键用 Record（结构相等，`TextStyle` 也实现了 `==`），不额外定义类。
+final Map<(String, bool, bool, TextStyle), List<InlineSpan>> _spanCache = {};
+
+/// 缓存条目上限。课表页满打满算几十段文案，256 足够覆盖明暗两套主题；
+/// 超了按插入顺序踢最早的一条（Dart 的 Map 就是 LinkedHashMap）。
+const int _spanCacheLimit = 256;
+
 List<InlineSpan> buildKeywordSpans(
+  String content,
+  TextStyle baseStyle,
+  bool isDark, {
+  bool tiered = true,
+}) {
+  if (content.isEmpty) return const <InlineSpan>[];
+  final cacheKey = (content, isDark, tiered, baseStyle);
+  final cached = _spanCache[cacheKey];
+  if (cached != null) return cached;
+  final spans = _buildKeywordSpans(content, baseStyle, isDark, tiered: tiered);
+  if (_spanCache.length >= _spanCacheLimit) {
+    _spanCache.remove(_spanCache.keys.first);
+  }
+  return _spanCache[cacheKey] = spans;
+}
+
+List<InlineSpan> _buildKeywordSpans(
   String content,
   TextStyle baseStyle,
   bool isDark, {
