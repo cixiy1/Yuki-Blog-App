@@ -8,7 +8,12 @@
 PRODUCT_NAME = Yuki-Blog
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.yiyu14.yukiblogapp
+//
+// 末尾的 .mac 不能省：iOS 那份叫 com.yiyu14.yukiblogapp，如果 macOS 用同一个
+// id，同一台 Mac 的 LaunchServices 里就会出现两条同 id 记录（一条 platform
+// = iOS、一条 macOS），`open` 解析到 iOS 那条会返回 1 —— flutter run 里表现
+// 为 "Failed to foreground app; open returned 1"，窗口拉不起来或全黑。
+PRODUCT_BUNDLE_IDENTIFIER = com.yiyu14.yukiblogapp.mac
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Yuki Blog. All rights reserved.
