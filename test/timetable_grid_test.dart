@@ -48,21 +48,26 @@ void main() {
     (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
   );
 
-  testWidgets('时段行标内联在每行行首，条数 = 时段行数', (tester) async {
-    await pumpGrid(tester);
+  testWidgets('显示不全时左右行标都在，且都内联在滚动里', (tester) async {
+    await pumpGrid(tester); // 400 宽，放不下
 
-    // 一行一个行标，左列内联、不再是独立的两列
+    // 每行：行首一个 + 行尾一个
     expect(
       find.byType(SlotLabelCell),
-      findsNWidgets(schedule.rows.length),
-      reason: '每个时段行行首各有一个行标',
+      findsNWidgets(schedule.rows.length * 2),
+      reason: '放不下时左右各一列行标',
     );
 
     final firstLabel = schedule.rows.first.label;
-    expect(find.text(firstLabel), findsNWidgets(1));
-    if (schedule.rows.first.timeText.isNotEmpty) {
-      expect(find.text(schedule.rows.first.timeText), findsNWidgets(1));
-    }
+    // 首行标签在左右两端各出现一次
+    expect(find.text(firstLabel), findsNWidgets(2));
+    final left = find.text(firstLabel).first;
+    final right = find.text(firstLabel).last;
+    expect(
+      tester.getTopLeft(left).dx,
+      lessThan(tester.getTopLeft(right).dx),
+      reason: '右列行标应在左列右侧（行尾）',
+    );
   });
 
   testWidgets('横向滚动时，行标随内容一起滚动', (tester) async {
@@ -77,7 +82,7 @@ void main() {
       reason: '窄屏下 7 天列应撑出横向滚动',
     );
 
-    // 首行行标在最左侧（内容 x=0 处）
+    // 首行左列行标在最左侧（内容 x=0 处）
     final firstLabel = find.byType(SlotLabelCell).first;
     final before = tester.getTopLeft(firstLabel);
 
@@ -90,9 +95,14 @@ void main() {
     expect(after.dx, lessThan(before.dx), reason: '行标应随内容一起滚动');
   });
 
-  testWidgets('宽屏放得下时不需要横向滚动', (tester) async {
+  testWidgets('宽屏放得下时只有左侧行标，且不横向滚动', (tester) async {
     await pumpGrid(tester, size: const Size(900, 900));
 
+    expect(
+      find.byType(SlotLabelCell),
+      findsNWidgets(schedule.rows.length),
+      reason: '放得下时只保留左侧一列行标',
+    );
     expect(
       tester
           .state<ScrollableState>(horizontalBody())
@@ -100,11 +110,6 @@ void main() {
           .maxScrollExtent,
       0,
       reason: '这个视口能铺下 7 天，不该横向滚动',
-    );
-    // 放得下时行标仍在，且每行一个
-    expect(
-      find.byType(SlotLabelCell),
-      findsNWidgets(schedule.rows.length),
     );
   });
 

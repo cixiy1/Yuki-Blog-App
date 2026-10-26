@@ -15,12 +15,13 @@ const _headerGap = 2.0;
 String weekdayLabel(int day) =>
     day >= 1 && day <= 7 ? _weekdayNames[day] : '周$day';
 
-/// 课表网格：左侧时段行标 + 每天一列，整体在一个横向滚动视图里。
+/// 课表网格：每天一列 + 行首/行尾内联的时段行标，整体在一个横向滚动视图里。
 ///
-/// 行标直接内联在每一行的最左侧，和课程格子一起滚动——滚到周三、周五时，
-/// 当前可见行的「第几节 / 几点到几点」跟着内容一起走，不会漂在滚动区之外。
-/// - 列宽按可用宽度在 [SchedulePalette.cellMinWidth] ~
-///   [SchedulePalette.cellMaxWidth] 之间自适应，窄屏横向滚动；
+/// 行标内联在每行的行首（放不下时行尾再补一列），和课程格子一起滚动——
+/// 行标跟着内容一起走，不再漂在滚动区之外。
+/// - 一屏放得下时只留左侧行标；放不下时左右各一列（列宽按实际列数扣）；
+/// - 列宽在 [SchedulePalette.cellMinWidth] ~ [SchedulePalette.cellMaxWidth]
+///   之间自适应，窄屏横向滚动；
 /// - 今天列在表头高亮（primary 底色胶囊 + 「今天」）；
 /// - 自定义时段行（临时活动）行标用 tertiary 色区分。
 class TimetableGrid extends StatelessWidget {
@@ -53,7 +54,14 @@ class TimetableGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dayCount = schedule.days.isEmpty ? 1 : schedule.days.length;
-        final available = constraints.maxWidth - SchedulePalette.labelWidth;
+        // 一屏放得下（不必横向滚动）就只留左侧行标；放不下才在行尾再补一列。
+        final fitsWithoutScroll =
+            constraints.maxWidth >=
+            SchedulePalette.labelWidth +
+                dayCount * SchedulePalette.cellMinWidth;
+        final labelColumns = fitsWithoutScroll ? 1 : 2;
+        final available =
+            constraints.maxWidth - SchedulePalette.labelWidth * labelColumns;
         final cellWidth =
             (available / dayCount)
                 .clamp(SchedulePalette.cellMinWidth, SchedulePalette.cellMaxWidth)
@@ -68,8 +76,10 @@ class TimetableGrid extends StatelessWidget {
           return maxEntries * (SchedulePalette.cellHeight + 4);
         }).toList(growable: false);
 
+        final showTrailingLabel = !fitsWithoutScroll;
         final totalWidth =
-            SchedulePalette.labelWidth + cellWidth * schedule.days.length;
+            SchedulePalette.labelWidth * labelColumns +
+            cellWidth * schedule.days.length;
 
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -85,6 +95,7 @@ class TimetableGrid extends StatelessWidget {
                     todayWeekday: todayWeekday,
                     cellWidth: cellWidth,
                     scheme: scheme,
+                    showTrailingLabel: showTrailingLabel,
                   ),
                 ),
                 const SizedBox(height: _headerGap),
@@ -97,6 +108,7 @@ class TimetableGrid extends StatelessWidget {
                     selectedKey: selectedKey,
                     onSelectEntry: onSelectEntry,
                     entriesAt: schedule.entriesAt,
+                    showTrailingLabel: showTrailingLabel,
                   ),
               ],
             ),
@@ -107,7 +119,8 @@ class TimetableGrid extends StatelessWidget {
   }
 }
 
-/// 表体的一行：左侧行标 + 按天铺格子。行标内联在行内，随内容一起横向滚动。
+/// 表体的一行：行首行标 + 按天铺格子（放不下时行尾再补一个行标）。
+/// 行标内联在行内，随内容一起横向滚动。
 class _GridRow extends StatelessWidget {
   const _GridRow({
     required this.row,
@@ -117,6 +130,7 @@ class _GridRow extends StatelessWidget {
     required this.selectedKey,
     required this.onSelectEntry,
     required this.entriesAt,
+    required this.showTrailingLabel,
   });
 
   final SlotRow row;
@@ -126,6 +140,7 @@ class _GridRow extends StatelessWidget {
   final String? selectedKey;
   final ValueChanged<ResolvedEntry> onSelectEntry;
   final List<ResolvedEntry> Function(int day, String rowKey) entriesAt;
+  final bool showTrailingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +152,7 @@ class _GridRow extends StatelessWidget {
           SlotLabelCell(row: row),
           for (final day in days)
             _dayCell(day),
+          if (showTrailingLabel) SlotLabelCell(row: row, alignEnd: true),
         ],
       ),
     );
@@ -172,6 +188,7 @@ class _DayHeaderRow extends StatelessWidget {
     required this.todayWeekday,
     required this.cellWidth,
     required this.scheme,
+    required this.showTrailingLabel,
   });
 
   final List<int> days;
@@ -179,6 +196,7 @@ class _DayHeaderRow extends StatelessWidget {
   final int todayWeekday;
   final double cellWidth;
   final ColorScheme scheme;
+  final bool showTrailingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +235,8 @@ class _DayHeaderRow extends StatelessWidget {
               ),
             ),
           ),
+        if (showTrailingLabel)
+          const SizedBox(width: SchedulePalette.labelWidth),
       ],
     );
   }

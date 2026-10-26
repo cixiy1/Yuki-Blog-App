@@ -51,25 +51,32 @@ class SchedulePalette {
 
 /// 网格的时段行标（如 "1-2节 / 08:30–10:00"）。
 ///
-/// 内联在每一行的最左侧，和课程格子一起横向滚动；纯文本，无底色无边框，
-/// 直接压在页面背景上、靠留白和课程格子区分。
+/// 内联在每一行的行首（左列）或行尾（右列），和课程格子一起横向滚动；
+/// 纯文本，无底色无边框，直接压在页面背景上、靠留白和课程格子区分。
+/// 右列传 [alignEnd]，文字右对齐，视觉上才像表格的行头。
 class SlotLabelCell extends StatelessWidget {
-  const SlotLabelCell({super.key, required this.row});
+  const SlotLabelCell({super.key, required this.row, this.alignEnd = false});
 
   final SlotRow row;
+
+  /// 右列行标：文字右对齐。
+  final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final align = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final textAlign = alignEnd ? TextAlign.right : TextAlign.left;
     return SizedBox(
       width: SchedulePalette.labelWidth,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: align,
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             row.label,
+            textAlign: textAlign,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -80,6 +87,7 @@ class SlotLabelCell extends StatelessWidget {
             Text(
               row.timeText,
               maxLines: 2,
+              textAlign: textAlign,
               style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
             ),
         ],
