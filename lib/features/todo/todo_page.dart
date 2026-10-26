@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:yuki_blog_app/app/theme.dart';
+import 'package:yuki_blog_app/core/todo_repository.dart';
 import 'package:yuki_blog_app/features/todo/todo_model.dart';
 import 'package:yuki_blog_app/features/todo/todo_storage.dart';
 
@@ -10,15 +11,21 @@ int _idSeq = 0;
 String _generateId() =>
     '${DateTime.now().microsecondsSinceEpoch}-${_idSeq++}';
 
-/// 待办页：本地持久化的个人任务清单。
+/// 待办页：网络优先自动拉取博客《待办清单》文章，本地增删改查长期保留。
 ///
 /// 被 [HomeShell] 的 [ImmersiveScaffold] 包裹，这里只返回 body。
-/// 数据通过 [TodoStorage] 接口读写（默认本地 JSON 文件），[storage] 可注入，便于测试。
+/// - 打开即自动拉取远端（[TodoRemoteSource]），解析文章里的待办项并合并；
+/// - 合并规则：远端决定「有哪些任务」及其标题/分类/截止；本机的完成状态、
+///   自建任务、对远端任务的删除（墓碑）都持久化保留；
+/// - 离线时回退到上一次合并后的本地数据，不丢本地改动。
 class TodoPage extends StatefulWidget {
-  const TodoPage({super.key, this.storage});
+  const TodoPage({super.key, this.storage, this.remote});
 
   /// 注入自定义存储（测试用）；不传则使用 [FileTodoStorage]。
   final TodoStorage? storage;
+
+  /// 注入自定义远端源（测试用）；不传则使用 [NetworkTodoRemoteSource]。
+  final TodoRemoteSource? remote;
 
   @override
   State<TodoPage> createState() => _TodoPageState();
@@ -29,10 +36,16 @@ enum _TodoFilter { all, active, done }
 class _TodoPageState extends State<TodoPage> {
   late final TodoStorage _storage = widget.storage ??
       FileTodoStorage(getApplicationDocumentsDirectory());
+  late final TodoRemoteSource _remote =
+      widget.remote ?? NetworkTodoRemoteSource();
 
   List<TodoItem> _items = const [];
+  Set<String> _deleted = const {};
   _TodoFilter _filter = _TodoFilter.all;
   bool _loading = true;
+  bool _syncing = false;
+  bool _offline = false;
+  DateTime? _lastSync;
 
   @override
   void initState() {
@@ -41,16 +54,96 @@ class _TodoPageState extends State<TodoPage> {
   }
 
   Future<void> _load() async {
-    final items = await _storage.load();
+    final store = await _storage.load();
     if (!mounted) return;
     setState(() {
-      _items = items;
+      _items = store.items;
+      _deleted = store.deletedRemoteIds;
       _loading = false;
     });
+    // 打开即自动拉取远端并合并（自动拉取显示）。
+    _sync();
+  }
+
+  /// 合并远端拉取结果与本地数据，规则见类注释。
+  List<TodoItem> _merge(List<TodoItem> local, List<RemoteTodo> remote) {
+    final remoteById = <String, RemoteTodo>{
+      for (final r in remote) r.id: r
+    };
+
+    final result = <TodoItem>[];
+    for (final item in local) {
+      if (item.source == TodoSource.local) {
+        // 本机自建：始终保留。
+        result.add(item);
+        continue;
+      }
+      final rid = item.remoteId;
+      if (rid == null || _deleted.contains(rid)) {
+        // 用户已删除该远端任务 → 墓碑，不再复活。
+        continue;
+      }
+      final r = remoteById.remove(rid);
+      if (r == null) {
+        // 远端已移除该项 → 同步移除（不再「存在」）。
+        continue;
+      }
+      // 远端仍在：刷新内容字段，保留本机完成状态。
+      result.add(item.copyWith(
+        title: r.title,
+        note: r.note,
+        category: r.category,
+        dueLabel: r.dueLabel,
+        dueDate: r.dueDate,
+      ));
+    }
+
+    // 远端新增、本地未见过的项。
+    for (final r in remoteById.values) {
+      if (_deleted.contains(r.id)) continue;
+      result.add(TodoItem(
+        id: 'remote-${r.id}',
+        remoteId: r.id,
+        title: r.title,
+        note: r.note,
+        category: r.category,
+        dueLabel: r.dueLabel,
+        dueDate: r.dueDate,
+        source: TodoSource.remote,
+        done: false,
+        createdAt: DateTime.now(),
+      ));
+    }
+    return result;
+  }
+
+  Future<void> _sync() async {
+    if (_syncing) return;
+    setState(() => _syncing = true);
+    try {
+      final remote = await _remote.fetch();
+      if (!mounted) return;
+      final merged = _merge(_items, remote);
+      setState(() {
+        _items = merged;
+        _lastSync = DateTime.now();
+        _offline = false;
+      });
+      await _persist();
+    } on TodoNetworkException {
+      if (!mounted) return;
+      // 离线 / 代理异常：保留本地数据，仅标记离线。
+      setState(() => _offline = true);
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 
   Future<void> _persist() async {
-    await _storage.save(_items);
+    await _storage.save(TodoStore(
+      items: _items,
+      deletedRemoteIds: _deleted,
+    ));
   }
 
   void _addItem(TodoItem item) {
@@ -75,9 +168,13 @@ class _TodoPageState extends State<TodoPage> {
     _persist();
   }
 
-  void _remove(String id) {
+  void _remove(TodoItem item) {
     setState(() {
-      _items = [for (final e in _items) if (e.id != id) e];
+      if (item.remoteId != null) {
+        // 远端任务：记入墓碑，下次拉取不再复活。
+        _deleted = {..._deleted, item.remoteId!};
+      }
+      _items = [for (final e in _items) if (e.id != item.id) e];
     });
     _persist();
   }
@@ -88,19 +185,21 @@ class _TodoPageState extends State<TodoPage> {
       _TodoFilter.done => _items.where((e) => e.done),
       _TodoFilter.all => _items.where((_) => true),
     };
-    // 未完成在前、已完成在后；同组有截止日的靠前，再按创建时间升序。
     final list = [...filtered];
     list.sort((a, b) {
       if (a.done != b.done) return a.done ? 1 : -1;
-      if (a.dueDate != null && b.dueDate != null) {
-        return a.dueDate!.compareTo(b.dueDate!);
-      }
-      if (a.dueDate != null) return -1;
-      if (b.dueDate != null) return 1;
+      final ad = a.dueDate ?? _dateFromLabel(a.dueLabel);
+      final bd = b.dueDate ?? _dateFromLabel(b.dueLabel);
+      if (ad != null && bd != null) return ad.compareTo(bd);
+      if (ad != null) return -1;
+      if (bd != null) return 1;
       return a.createdAt.compareTo(b.createdAt);
     });
     return list;
   }
+
+  DateTime? _dateFromLabel(String? label) =>
+      label == null ? null : _parseLabelDate(label);
 
   int get _activeCount => _items.where((e) => !e.done).length;
 
@@ -125,40 +224,47 @@ class _TodoPageState extends State<TodoPage> {
       top: false,
       child: Stack(
         children: [
-          ListView(
-            padding: EdgeInsets.fromLTRB(
-              AppTheme.spacingMd,
-              AppTheme.spacingSm + MediaQuery.paddingOf(context).top,
-              AppTheme.spacingMd,
-              AppTheme.spacingXl + 88,
-            ),
-            children: [
-              _Header(
-                total: _items.length,
-                active: _activeCount,
-                filter: _filter,
-                onFilter: (f) => setState(() => _filter = f),
+          RefreshIndicator(
+            onRefresh: _sync,
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppTheme.spacingMd,
+                AppTheme.spacingSm + MediaQuery.paddingOf(context).top,
+                AppTheme.spacingMd,
+                AppTheme.spacingXl + 88,
               ),
-              const SizedBox(height: AppTheme.spacingMd),
-              if (_loading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(AppTheme.spacingLg),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (visible.isEmpty)
-                _EmptyState(filter: _filter)
-              else
-                for (final item in visible)
-                  _TodoTile(
-                    key: Key(item.id),
-                    item: item,
-                    onToggle: () => _toggle(item.id),
-                    onEdit: () => _showEditor(initial: item),
-                    onDelete: () => _remove(item.id),
-                  ),
-            ],
+              children: [
+                _Header(
+                  total: _items.length,
+                  active: _activeCount,
+                  filter: _filter,
+                  onFilter: (f) => setState(() => _filter = f),
+                  onRefresh: _sync,
+                  syncing: _syncing,
+                  offline: _offline,
+                  lastSync: _lastSync,
+                ),
+                const SizedBox(height: AppTheme.spacingMd),
+                if (_loading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(AppTheme.spacingLg),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else if (visible.isEmpty)
+                  _EmptyState(filter: _filter, offline: _offline)
+                else
+                  for (final item in visible)
+                    _TodoTile(
+                      key: Key(item.id),
+                      item: item,
+                      onToggle: () => _toggle(item.id),
+                      onEdit: () => _showEditor(initial: item),
+                      onDelete: () => _remove(item),
+                    ),
+              ],
+            ),
           ),
           Positioned(
             right: AppTheme.spacingLg,
@@ -175,23 +281,43 @@ class _TodoPageState extends State<TodoPage> {
   }
 }
 
-/// 顶部：统计 + 筛选。
+/// 顶部：统计 + 筛选 + 同步状态与手动刷新。
 class _Header extends StatelessWidget {
   const _Header({
     required this.total,
     required this.active,
     required this.filter,
     required this.onFilter,
+    required this.onRefresh,
+    required this.syncing,
+    required this.offline,
+    required this.lastSync,
   });
 
   final int total;
   final int active;
   final _TodoFilter filter;
   final ValueChanged<_TodoFilter> onFilter;
+  final VoidCallback onRefresh;
+  final bool syncing;
+  final bool offline;
+  final DateTime? lastSync;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final syncing = this.syncing;
+    final lastSync = this.lastSync;
+    final offline = this.offline;
+
+    final syncHint = syncing
+        ? '同步中…'
+        : offline
+            ? '离线，显示本地'
+            : lastSync == null
+                ? '未同步'
+                : '已同步';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -214,7 +340,36 @@ class _Header extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
+            IconButton(
+              icon: syncing
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Icon(Icons.refresh,
+                      color: scheme.onSurfaceVariant, size: 20),
+              onPressed: syncing ? null : onRefresh,
+              tooltip: '同步待办',
+              visualDensity: VisualDensity.compact,
+            ),
           ],
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 2),
+          child: Text(
+            syncHint,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: offline
+                  ? scheme.onSurfaceVariant
+                  : scheme.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
+          ),
         ),
         const SizedBox(height: AppTheme.spacingMd),
         SegmentedButton<_TodoFilter>(
@@ -232,11 +387,12 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// 空状态提示，文案随筛选变化。
+/// 空状态提示，文案随筛选与离线状态变化。
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.filter});
+  const _EmptyState({required this.filter, this.offline = false});
 
   final _TodoFilter filter;
+  final bool offline;
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +400,8 @@ class _EmptyState extends StatelessWidget {
     final hint = switch (filter) {
       _TodoFilter.active => '没有进行中的待办，去放松一下吧',
       _TodoFilter.done => '还没有已完成的任务',
-      _TodoFilter.all => '点右下角 + 添加你的第一条待办',
+      _TodoFilter.all =>
+        offline ? '暂未联网，本地也没有待办' : '点右下角 + 添加你的第一条待办',
     };
     return Center(
       child: Padding(
@@ -289,12 +446,10 @@ class _TodoTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final accent = _categoryColor(item.category, scheme);
 
-      final dueText = item.dueDate == null
-          ? null
-          : formatDueLabel(item.dueDate!, done: item.done);
-      final dueOverdue = dueText != null &&
-          !item.done &&
-          dueText.startsWith('逾期');
+    final dueText = item.dueText(done: item.done);
+    final dueOverdue = dueText != null &&
+        !item.done &&
+        (dueText.startsWith('逾期') || dueText.contains('逾期'));
 
     return Dismissible(
       key: Key('dismiss-${item.id}'),
@@ -330,18 +485,30 @@ class _TodoTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          decoration: item.done
-                              ? TextDecoration.lineThrough
-                              : null,
-                          color: item.done
-                              ? scheme.onSurface.withValues(alpha: 0.45)
-                              : scheme.onSurface,
-                        ),
+                      Row(
+                        children: [
+                          if (item.source == TodoSource.remote)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(Icons.cloud_outlined,
+                                  size: 12, color: scheme.onSurfaceVariant),
+                            ),
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                decoration: item.done
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: item.done
+                                    ? scheme.onSurface.withValues(alpha: 0.45)
+                                    : scheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       if (item.note != null && item.note!.isNotEmpty) ...[
                         const SizedBox(height: 4),
@@ -482,6 +649,13 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
       done: initial?.done ?? false,
       createdAt: initial?.createdAt,
       dueDate: _dueDate,
+      // 远端项被编辑时转为本地自建，避免下次拉取被远端覆盖。
+      source: initial?.source == TodoSource.remote
+          ? TodoSource.local
+          : (initial?.source ?? TodoSource.local),
+      remoteId: initial?.source == TodoSource.remote
+          ? null
+          : initial?.remoteId,
     );
     Navigator.pop(context, item);
   }
@@ -563,5 +737,22 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
         ),
       ],
     );
+  }
+}
+
+/// 与远端解析共用：从截止文案抽日期（见 [parseTodoHtml] 内的同名实现）。
+DateTime? _parseLabelDate(String label) {
+  final m = RegExp(r'(\d{1,2})[.月/](\d{1,2})').firstMatch(label);
+  if (m == null) return null;
+  final month = int.tryParse(m.group(1)!);
+  final day = int.tryParse(m.group(2)!);
+  if (month == null || day == null || month < 1 || month > 12 || day < 1) {
+    return null;
+  }
+  final now = DateTime.now();
+  try {
+    return DateTime(now.year, month, day);
+  } on ArgumentError {
+    return null;
   }
 }

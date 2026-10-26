@@ -17,6 +17,12 @@ enum TodoCategory {
       [classAffairs, party, personal, other];
 }
 
+/// 一条待办的来历：来自博客文章（远端）还是本机新建（本地）。
+enum TodoSource {
+  remote,
+  local,
+}
+
 /// 单条待办。可序列化到本地 JSON 文件。
 class TodoItem {
   TodoItem({
@@ -27,6 +33,9 @@ class TodoItem {
     this.done = false,
     DateTime? createdAt,
     this.dueDate,
+    this.dueLabel,
+    this.source = TodoSource.local,
+    this.remoteId,
   }) : createdAt = createdAt ?? DateTime.now();
 
   final String id;
@@ -35,7 +44,19 @@ class TodoItem {
   final TodoCategory category;
   final bool done;
   final DateTime createdAt;
+
+  /// 本地设定的绝对截止日（新建/编辑时选日期）。
   final DateTime? dueDate;
+
+  /// 远端文章里给出的截止文案（如「第8周周日 10.25 23:00 关闭」），
+  /// 未必能解析成绝对日期，原样保留用于展示。
+  final String? dueLabel;
+
+  /// 来历：远端文章同步来的，还是本机新建的。
+  final TodoSource source;
+
+  /// 远端文章里该条目的稳定 id（博客 `data-todo-id`）。本地新建项为 null。
+  final String? remoteId;
 
   TodoItem copyWith({
     String? title,
@@ -44,6 +65,9 @@ class TodoItem {
     bool? done,
     DateTime? dueDate,
     bool clearDue = false,
+    String? dueLabel,
+    TodoSource? source,
+    String? remoteId,
   }) =>
       TodoItem(
         id: id,
@@ -53,7 +77,17 @@ class TodoItem {
         done: done ?? this.done,
         createdAt: createdAt,
         dueDate: clearDue ? null : (dueDate ?? this.dueDate),
+        dueLabel: dueLabel ?? this.dueLabel,
+        source: source ?? this.source,
+        remoteId: remoteId ?? this.remoteId,
       );
+
+  /// 展示用的截止文案：优先远端原文，其次按本地日期算。
+  String? dueText({bool done = false}) {
+    if (dueLabel != null && dueLabel!.isNotEmpty) return dueLabel;
+    if (dueDate != null) return formatDueLabel(dueDate!, done: done);
+    return null;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -63,6 +97,9 @@ class TodoItem {
         'done': done,
         'createdAt': createdAt.toIso8601String(),
         'dueDate': dueDate?.toIso8601String(),
+        'dueLabel': dueLabel,
+        'source': source.name,
+        'remoteId': remoteId,
       };
 
   factory TodoItem.fromJson(Map<String, dynamic> json) {
@@ -70,6 +107,11 @@ class TodoItem {
     final category = TodoCategory.values.firstWhere(
       (c) => c.name == categoryName,
       orElse: () => TodoCategory.other,
+    );
+    final sourceName = json['source'] as String?;
+    final source = TodoSource.values.firstWhere(
+      (s) => s.name == sourceName,
+      orElse: () => TodoSource.local,
     );
     final createdRaw = json['createdAt'] as String?;
     final dueRaw = json['dueDate'] as String?;
@@ -79,10 +121,11 @@ class TodoItem {
       note: json['note'] as String?,
       category: category,
       done: json['done'] as bool? ?? false,
-      createdAt: createdRaw == null
-          ? null
-          : DateTime.tryParse(createdRaw),
+      createdAt: createdRaw == null ? null : DateTime.tryParse(createdRaw),
       dueDate: dueRaw == null ? null : DateTime.tryParse(dueRaw),
+      dueLabel: json['dueLabel'] as String?,
+      source: source,
+      remoteId: json['remoteId'] as String?,
     );
   }
 }
