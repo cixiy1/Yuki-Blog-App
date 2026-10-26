@@ -130,8 +130,8 @@ class TimetableGrid extends StatelessWidget {
 
 /// 固定的行标列（左 / 右各一）。顶部空出表头高度，与表体逐行对齐。
 ///
-/// 每一行都带一层极淡底色 + 行底分隔线，贴表体那一侧再画一条竖线：
-/// 行头区从格子里「退后一档」，横向看过去能一眼咬住这是哪一节。
+/// 整列铺一层明显但柔和的中性底色，把时段行标从格子里「抬」出来；
+/// 不用边框线——细线在不该有的地方看着像一道脏阴影。
 class _SlotLabelColumn extends StatelessWidget {
   const _SlotLabelColumn({
     required this.rows,
@@ -146,8 +146,10 @@ class _SlotLabelColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final divider = scheme.outlineVariant.withValues(alpha: 0.45);
-    final fill = scheme.surfaceContainerHighest.withValues(alpha: 0.16);
+    // 行头底色：中性浅灰。不能跟课程格子用同一个蓝——primaryContainer 就是
+    // 那张浅蓝，行头再叠蓝色只会和格子糊成一片；灰底才能把时段列从格子里
+    // 干净地分出来，同时和页面背景（#F7F8FA）拉开层次。
+    final fill = scheme.surfaceContainerHighest.withValues(alpha: 0.9);
 
     // 必须给出确定宽度：Row 的非 flex 子拿到的是 0..infinity 的松约束，
     // 直接 stretch 会把无限宽度传给子节点（BoxConstraints forces an
@@ -162,17 +164,7 @@ class _SlotLabelColumn extends StatelessWidget {
           for (var i = 0; i < rows.length; i++)
             Container(
               height: heights[i],
-              decoration: BoxDecoration(
-                color: fill,
-                border: Border(
-                  bottom: BorderSide(color: divider),
-                  // 贴表体那一侧画竖线，把行头和格子分开
-                  left: alignEnd ? BorderSide(color: divider) : BorderSide.none,
-                  right: alignEnd
-                      ? BorderSide.none
-                      : BorderSide(color: divider),
-                ),
-              ),
+              color: fill,
               child: Align(
                 alignment: alignEnd
                     ? Alignment.centerRight
