@@ -18,6 +18,9 @@ String _generateId() =>
 /// - 合并规则：远端决定「有哪些任务」及其标题/分类/截止；本机的完成状态、
 ///   自建任务、对远端任务的删除（墓碑）都持久化保留；
 /// - 离线时回退到上一次合并后的本地数据，不丢本地改动。
+///
+/// 布局参考博客 Firefly 主题的待办组件：按分类分组、圆形成勾选框、顶部进度条、
+/// 截止日胶囊徽标、备注左边线。
 class TodoPage extends StatefulWidget {
   const TodoPage({super.key, this.storage, this.remote});
 
@@ -198,10 +201,30 @@ class _TodoPageState extends State<TodoPage> {
     return list;
   }
 
+  /// 当前筛选结果按分类分组（沿用 [TodoCategory.valuesOrdered] 顺序，
+  /// 只保留非空分组），对应网页「按组分区」的展示结构。
+  List<(TodoCategory, List<TodoItem>)> get _groups {
+    final map = <TodoCategory, List<TodoItem>>{
+      for (final c in TodoCategory.valuesOrdered) c: <TodoItem>[],
+    };
+    for (final e in _visible) {
+      map.putIfAbsent(e.category, () => <TodoItem>[]).add(e);
+    }
+    return [
+      for (final c in TodoCategory.valuesOrdered)
+        if (map[c]!.isNotEmpty) (c, map[c]!),
+    ];
+  }
+
   DateTime? _dateFromLabel(String? label) =>
       label == null ? null : _parseLabelDate(label);
 
   int get _activeCount => _items.where((e) => !e.done).length;
+
+  double get _progress {
+    if (_items.isEmpty) return 0;
+    return (_items.length - _activeCount) / _items.length;
+  }
 
   Future<void> _showEditor({TodoItem? initial}) async {
     final result = await showDialog<TodoItem>(
@@ -218,7 +241,8 @@ class _TodoPageState extends State<TodoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _visible;
+    final groups = _groups;
+    final allDone = _items.isNotEmpty && _activeCount == 0;
 
     return SafeArea(
       top: false,
@@ -237,6 +261,7 @@ class _TodoPageState extends State<TodoPage> {
                 _Header(
                   total: _items.length,
                   active: _activeCount,
+                  progress: _progress,
                   filter: _filter,
                   onFilter: (f) => setState(() => _filter = f),
                   onRefresh: _sync,
@@ -252,17 +277,22 @@ class _TodoPageState extends State<TodoPage> {
                       child: CircularProgressIndicator(),
                     ),
                   )
-                else if (visible.isEmpty)
+                else if (groups.isEmpty)
                   _EmptyState(filter: _filter, offline: _offline)
                 else
-                  for (final item in visible)
-                    _TodoTile(
-                      key: Key(item.id),
-                      item: item,
-                      onToggle: () => _toggle(item.id),
-                      onEdit: () => _showEditor(initial: item),
-                      onDelete: () => _remove(item),
+                  for (final (category, items) in groups)
+                    _CategoryGroup(
+                      key: Key('group-${category.name}'),
+                      category: category,
+                      items: items,
+                      onToggle: _toggle,
+                      onEdit: (item) {
+                        _showEditor(initial: item);
+                      },
+                      onDelete: _remove,
                     ),
+                if (!_loading && groups.isNotEmpty && allDone)
+                  const _DoneNote(),
               ],
             ),
           ),
@@ -281,11 +311,12 @@ class _TodoPageState extends State<TodoPage> {
   }
 }
 
-/// 顶部：统计 + 筛选 + 同步状态与手动刷新。
+/// 顶部：统计 + 进度条 + 筛选 + 同步状态与手动刷新。
 class _Header extends StatelessWidget {
   const _Header({
     required this.total,
     required this.active,
+    required this.progress,
     required this.filter,
     required this.onFilter,
     required this.onRefresh,
@@ -296,6 +327,7 @@ class _Header extends StatelessWidget {
 
   final int total;
   final int active;
+  final double progress;
   final _TodoFilter filter;
   final ValueChanged<_TodoFilter> onFilter;
   final VoidCallback onRefresh;
@@ -306,9 +338,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final syncing = this.syncing;
-    final lastSync = this.lastSync;
-    final offline = this.offline;
 
     final syncHint = syncing
         ? '同步中…'
@@ -365,10 +394,19 @@ class _Header extends StatelessWidget {
             syncHint,
             style: TextStyle(
               fontSize: 11.5,
-              color: offline
-                  ? scheme.onSurfaceVariant
-                  : scheme.onSurfaceVariant.withValues(alpha: 0.8),
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
             ),
+          ),
+        ),
+        const SizedBox(height: AppTheme.spacingSm),
+        // 进度条：圆角轨道 + 主色填充，对应网页 .todo-progress。
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor: scheme.primary.withValues(alpha: 0.14),
+            valueColor: AlwaysStoppedAnimation(scheme.primary),
           ),
         ),
         const SizedBox(height: AppTheme.spacingMd),
@@ -426,7 +464,148 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// 单条待办：勾选 / 分类 / 截止日 / 编辑 / 滑动删除。
+/// 分类分组：淡主色容器 + 带主色左边线的组标题，对应网页 .todo-group。
+class _CategoryGroup extends StatelessWidget {
+  const _CategoryGroup({
+    super.key,
+    required this.category,
+    required this.items,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final TodoCategory category;
+  final List<TodoItem> items;
+  final ValueChanged<String> onToggle;
+  final ValueChanged<TodoItem> onEdit;
+  final ValueChanged<TodoItem> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMd,
+        vertical: AppTheme.spacingSm,
+      ),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.05),
+        border: Border.all(
+          color: scheme.primary.withValues(alpha: 0.13),
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacingSm),
+              Text(
+                category.label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.primary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${items.length} 项',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingXs),
+          for (final item in items)
+            _TodoTile(
+              key: Key(item.id),
+              item: item,
+              onToggle: () => onToggle(item.id),
+              onEdit: () => onEdit(item),
+              onDelete: () => onDelete(item),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 全部完成时的鼓励提示，对应网页 .todo-done-note。
+class _DoneNote extends StatelessWidget {
+  const _DoneNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.spacingMd),
+      child: Center(
+        child: Text(
+          '全部完成，辛苦啦！',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: scheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 圆形成勾选框，对应网页 .todo-box（2px 主色描边，完成时填充主色 + 白勾）。
+class TodoCheckCircle extends StatelessWidget {
+  const TodoCheckCircle({
+    super.key,
+    required this.done,
+    required this.onTap,
+  });
+
+  final bool done;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final active = scheme.primary;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: done ? active : Colors.transparent,
+          border: Border.all(
+            color: done ? active : active.withValues(alpha: 0.5),
+            width: 2,
+          ),
+        ),
+        child: done
+            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            : null,
+      ),
+    );
+  }
+}
+
+/// 单条待办：圆形成勾选 / 标题 / 备注左边线 / 截止胶囊 / 滑动删除 + 删除按钮。
 class _TodoTile extends StatelessWidget {
   const _TodoTile({
     super.key,
@@ -444,12 +623,118 @@ class _TodoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent = _categoryColor(item.category, scheme);
 
     final dueText = item.dueText(done: item.done);
     final dueOverdue = dueText != null &&
         !item.done &&
         (dueText.startsWith('逾期') || dueText.contains('逾期'));
+
+    final titleStyle = TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      decoration: item.done ? TextDecoration.lineThrough : null,
+      color: item.done
+          ? scheme.onSurface.withValues(alpha: 0.45)
+          : scheme.onSurface,
+    );
+
+    final child = InkWell(
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      onTap: onEdit,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: AppTheme.spacingSm,
+          horizontal: AppTheme.spacingXs,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: TodoCheckCircle(done: item.done, onTap: onToggle),
+            ),
+            const SizedBox(width: AppTheme.spacingSm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (item.source == TodoSource.remote)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Icon(Icons.cloud_outlined,
+                              size: 12, color: scheme.onSurfaceVariant),
+                        ),
+                      Expanded(
+                        child: Text(item.title, style: titleStyle),
+                      ),
+                    ],
+                  ),
+                  if (item.note != null && item.note!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.only(left: 10),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(
+                            color: scheme.primary.withValues(alpha: 0.3),
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        item.note!,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.6,
+                          color: item.done
+                              ? scheme.onSurfaceVariant
+                                  .withValues(alpha: 0.6)
+                              : scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (dueText != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: dueOverdue
+                            ? scheme.errorContainer
+                            : scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        dueText,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: dueOverdue
+                              ? scheme.onErrorContainer
+                              : scheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete_outline,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
+              onPressed: onDelete,
+              tooltip: '删除',
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      ),
+    );
 
     return Dismissible(
       key: Key('dismiss-${item.id}'),
@@ -464,134 +749,11 @@ class _TodoTile extends StatelessWidget {
         child: Icon(Icons.delete_outline, color: scheme.onErrorContainer),
       ),
       onDismissed: (_) => onDelete(),
-      child: Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          onTap: onEdit,
-          child: Padding(
-            padding: const EdgeInsets.all(AppTheme.spacingMd),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Checkbox(
-                    value: item.done,
-                    onChanged: (_) => onToggle(),
-                  ),
-                ),
-                const SizedBox(width: AppTheme.spacingXs),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (item.source == TodoSource.remote)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(Icons.cloud_outlined,
-                                  size: 12, color: scheme.onSurfaceVariant),
-                            ),
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                decoration: item.done
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                color: item.done
-                                    ? scheme.onSurface.withValues(alpha: 0.45)
-                                    : scheme.onSurface,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (item.note != null && item.note!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          item.note!,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            height: 1.4,
-                            color: item.done
-                                ? scheme.onSurfaceVariant
-                                    .withValues(alpha: 0.6)
-                                : scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: AppTheme.spacingXs,
-                        runSpacing: AppTheme.spacingXs,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Chip(
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                            backgroundColor:
-                                accent.withValues(alpha: 0.14),
-                            label: Text(
-                              item.category.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: accent,
-                              ),
-                            ),
-                            avatar: Icon(item.category.icon,
-                                size: 13, color: accent),
-                            padding: EdgeInsets.zero,
-                          ),
-                          if (dueText != null)
-                            Text(
-                              dueText,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
-                                color: dueOverdue
-                                    ? scheme.error
-                                    : scheme.onSurfaceVariant,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete_outline,
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
-                  onPressed: onDelete,
-                  tooltip: '删除',
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: child,
       ),
     );
-  }
-
-  Color _categoryColor(TodoCategory c, ColorScheme s) {
-    switch (c) {
-      case TodoCategory.classAffairs:
-        return s.primary;
-      case TodoCategory.party:
-        return s.tertiary;
-      case TodoCategory.personal:
-        return s.secondary;
-      case TodoCategory.other:
-        return s.outline;
-    }
   }
 }
 
@@ -740,7 +902,7 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
   }
 }
 
-/// 与远端解析共用：从截止文案抽日期（见 [parseTodoHtml] 内的同名实现）。
+/// 从截止文案抽日期（见 [parseTodoHtml] 内的同名实现）。
 DateTime? _parseLabelDate(String label) {
   final m = RegExp(r'(\d{1,2})[.月/](\d{1,2})').firstMatch(label);
   if (m == null) return null;

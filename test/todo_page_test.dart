@@ -64,7 +64,7 @@ void main() {
 
     expect(find.text('交入党申请书'), findsOneWidget);
 
-    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.byType(TodoCheckCircle));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('进行中'));
@@ -81,7 +81,7 @@ void main() {
     await addTodo(tester, '待删除项');
     expect(find.text('待删除项'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.delete_outline));
     await tester.pumpAndSettle();
     expect(find.text('待删除项'), findsNothing);
   });
@@ -146,7 +146,7 @@ void main() {
     expect(find.text('待复活项'), findsOneWidget);
 
     // 删除该远端项（记入墓碑）
-    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.delete_outline));
     await tester.pumpAndSettle();
     expect(find.text('待复活项'), findsNothing);
 
