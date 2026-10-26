@@ -49,24 +49,33 @@ class SchedulePalette {
   static const double cellMaxWidth = 200;
 }
 
-/// 网格左侧的时段行标（如 "1-2节 / 08:30–10:00"）。
+/// 网格的时段行标（如 "1-2节 / 08:30–10:00"）。
+///
+/// 表格左右两端各放一列：横向滚动到中间时，两边都能对上节次与时间。
+/// 右列传 [alignEnd]，文字右对齐，视觉上才像表格的行头。
 class SlotLabelCell extends StatelessWidget {
-  const SlotLabelCell({super.key, required this.row});
+  const SlotLabelCell({super.key, required this.row, this.alignEnd = false});
 
   final SlotRow row;
+
+  /// 右列行标：文字右对齐。
+  final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final align = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final textAlign = alignEnd ? TextAlign.right : TextAlign.left;
     return SizedBox(
       width: SchedulePalette.labelWidth,
       height: SchedulePalette.cellHeight,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: align,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             row.label,
+            textAlign: textAlign,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -77,6 +86,7 @@ class SlotLabelCell extends StatelessWidget {
             Text(
               row.timeText,
               maxLines: 2,
+              textAlign: textAlign,
               style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
             ),
         ],
