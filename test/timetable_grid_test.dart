@@ -108,16 +108,16 @@ void main() {
     }
   });
 
-  testWidgets('一屏放得下时，右侧不再显示行标', (tester) async {
-    // 900 宽足够铺下 7 天（58 + 7×98 = 744），节次始终看得见，
-    // 右侧那列纯占地方，应该省掉。
+  testWidgets('宽屏下右侧行标依旧保留', (tester) async {
+    // 无论视口多宽，左右两列作息表都始终显示。
     await pumpGrid(tester, size: const Size(900, 900));
 
     expect(
       find.byType(SlotLabelCell),
-      findsNWidgets(schedule.rows.length),
-      reason: '放得下时只保留左侧一列',
+      findsNWidgets(schedule.rows.length * 2),
+      reason: '宽屏也保留左右两列行标',
     );
+    // 900 宽放得下 7 天，本就不该横向滚动。
     expect(
       tester
           .state<ScrollableState>(horizontalBody())
@@ -128,7 +128,7 @@ void main() {
     );
   });
 
-  testWidgets('放不下时右侧补一列，且此时确实需要滚动', (tester) async {
+  testWidgets('窄屏下右侧补一列，且此时确实需要滚动', (tester) async {
     await pumpGrid(tester); // 400 宽
 
     expect(

@@ -53,16 +53,9 @@ class TimetableGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dayCount = schedule.days.isEmpty ? 1 : schedule.days.length;
-        // 只有「一屏就放得下、不用横向滚动」时才省掉右侧行标：
-        // 放得下就说明节次始终看得见，右边再来一列纯属占地；
-        // 放不下则必须留，否则滚到周三以后就没有节次可对照了。
-        final fitsWithoutScroll =
-            constraints.maxWidth >=
-            SchedulePalette.labelWidth +
-                dayCount * SchedulePalette.cellMinWidth;
-        final labelColumns = fitsWithoutScroll ? 1 : 2;
-        final available =
-            constraints.maxWidth - SchedulePalette.labelWidth * labelColumns;
+        // 左右各一列时段行标，始终显示：横向滚动到周三以后，
+        // 两边都能对上「第几节 / 几点到几点」，不用滚回去核对。
+        final available = constraints.maxWidth - SchedulePalette.labelWidth * 2;
         final cellWidth =
             (available / dayCount).clamp(
               SchedulePalette.cellMinWidth,
@@ -115,12 +108,11 @@ class TimetableGrid extends StatelessWidget {
                 ),
               ),
             ),
-            if (!fitsWithoutScroll)
-              _SlotLabelColumn(
-                rows: schedule.rows,
-                heights: rowHeights,
-                alignEnd: true,
-              ),
+            _SlotLabelColumn(
+              rows: schedule.rows,
+              heights: rowHeights,
+              alignEnd: true,
+            ),
           ],
         );
       },
@@ -130,8 +122,7 @@ class TimetableGrid extends StatelessWidget {
 
 /// 固定的行标列（左 / 右各一）。顶部空出表头高度，与表体逐行对齐。
 ///
-/// 整列铺一层明显但柔和的中性底色，把时段行标从格子里「抬」出来；
-/// 不用边框线——细线在不该有的地方看着像一道脏阴影。
+/// 没有任何底色或边框——时段行标直接压在页面背景上，和课程格子靠留白区分。
 class _SlotLabelColumn extends StatelessWidget {
   const _SlotLabelColumn({
     required this.rows,
@@ -145,12 +136,6 @@ class _SlotLabelColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // 行头底色：中性浅灰。不能跟课程格子用同一个蓝——primaryContainer 就是
-    // 那张浅蓝，行头再叠蓝色只会和格子糊成一片；灰底才能把时段列从格子里
-    // 干净地分出来，同时和页面背景（#F7F8FA）拉开层次。
-    final fill = scheme.surfaceContainerHighest.withValues(alpha: 0.9);
-
     // 必须给出确定宽度：Row 的非 flex 子拿到的是 0..infinity 的松约束，
     // 直接 stretch 会把无限宽度传给子节点（BoxConstraints forces an
     // infinite width）。行标宽度本来就是固定的 labelWidth。
@@ -162,15 +147,9 @@ class _SlotLabelColumn extends StatelessWidget {
         children: [
           const SizedBox(height: _headerHeight + _headerGap),
           for (var i = 0; i < rows.length; i++)
-            Container(
+            SizedBox(
               height: heights[i],
-              color: fill,
-              child: Align(
-                alignment: alignEnd
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                child: SlotLabelCell(row: rows[i], alignEnd: alignEnd),
-              ),
+              child: SlotLabelCell(row: rows[i], alignEnd: alignEnd),
             ),
         ],
       ),
