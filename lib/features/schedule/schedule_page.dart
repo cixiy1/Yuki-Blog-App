@@ -198,17 +198,8 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           selectedKey: _selectedKey,
           onSelectEntry: _selectEntry,
         ),
-        // 「本周调整」紧跟课表网格，排在通知之上：本周到底哪节课变了，比
-        // 通知更该先看到。顺序对齐网页版（`#tt-grid` → `#tt-changes` →
-        // 图例 → 通知面板 → 数据更新历）。
-        if (schedule.changes.isNotEmpty) ...[
-          const SizedBox(height: AppTheme.spacingMd),
-          WeekChangesPanel(changes: schedule.changes),
-        ],
-        const SizedBox(height: AppTheme.spacingMd),
-        // 通知栏置于课表网格之下（与网页版布局一致）
-        NoticesPanel(notices: notices),
-        const TimetableLegend(),
+        // 选中课程后，详情紧贴课表网格（在通知之上）：点的哪一格、就接着
+        // 在它下面看这一格的信息，不用跨过通知区去找。
         if (selected != null) ...[
           const SizedBox(height: AppTheme.spacingMd),
           CourseDetailPanel(
@@ -216,6 +207,15 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
             onClose: () => setState(() => _selectedKey = null),
           ),
         ],
+        // 顺序：网格 → 课程详情 → 通知 → 本周调整 → 图例 → 数据更新历。
+        // 通知（NoticesPanel）自带下边距，本周调整直接跟在它下面。
+        const SizedBox(height: AppTheme.spacingMd),
+        NoticesPanel(notices: notices),
+        if (schedule.changes.isNotEmpty) ...[
+          WeekChangesPanel(changes: schedule.changes),
+          const SizedBox(height: AppTheme.spacingMd),
+        ],
+        const TimetableLegend(),
         const SizedBox(height: AppTheme.spacingMd),
         ChangelogPanel(meta: meta),
         const SizedBox(height: AppTheme.spacingLg),
