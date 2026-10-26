@@ -53,6 +53,7 @@ class SchedulePalette {
 ///
 /// 表格左右两端各放一列：横向滚动到中间时，两边都能对上节次与时间。
 /// 右列传 [alignEnd]，文字右对齐，视觉上才像表格的行头。
+/// 节次加粗突出，时间用等宽数字单行自适应缩放（58px 里放得下 08:30–10:00）。
 class SlotLabelCell extends StatelessWidget {
   const SlotLabelCell({super.key, required this.row, this.alignEnd = false});
 
@@ -72,23 +73,38 @@ class SlotLabelCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: align,
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             row.label,
             textAlign: textAlign,
+            maxLines: 1,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
               color: row.isCustom ? scheme.tertiary : scheme.onSurface,
             ),
           ),
-          if (row.timeText.isNotEmpty)
-            Text(
-              row.timeText,
-              maxLines: 2,
-              textAlign: textAlign,
-              style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
+          if (row.timeText.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+              child: Text(
+                row.timeText,
+                textAlign: textAlign,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w500,
+                  // 等宽数字：上下两行的时间才能对齐成一条竖线
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
             ),
+          ],
         ],
       ),
     );

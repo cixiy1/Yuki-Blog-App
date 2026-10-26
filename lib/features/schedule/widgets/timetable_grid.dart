@@ -53,9 +53,16 @@ class TimetableGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dayCount = schedule.days.isEmpty ? 1 : schedule.days.length;
-        // 两列行标占掉的是左右各一份固定宽度，中间表体才是弹性空间。
+        // 只有「一屏就放得下、不用横向滚动」时才省掉右侧行标：
+        // 放得下就说明节次始终看得见，右边再来一列纯属占地；
+        // 放不下则必须留，否则滚到周三以后就没有节次可对照了。
+        final fitsWithoutScroll =
+            constraints.maxWidth >=
+            SchedulePalette.labelWidth +
+                dayCount * SchedulePalette.cellMinWidth;
+        final labelColumns = fitsWithoutScroll ? 1 : 2;
         final available =
-            constraints.maxWidth - SchedulePalette.labelWidth * 2;
+            constraints.maxWidth - SchedulePalette.labelWidth * labelColumns;
         final cellWidth =
             (available / dayCount).clamp(
               SchedulePalette.cellMinWidth,
@@ -108,11 +115,12 @@ class TimetableGrid extends StatelessWidget {
                 ),
               ),
             ),
-            _SlotLabelColumn(
-              rows: schedule.rows,
-              heights: rowHeights,
-              alignEnd: true,
-            ),
+            if (!fitsWithoutScroll)
+              _SlotLabelColumn(
+                rows: schedule.rows,
+                heights: rowHeights,
+                alignEnd: true,
+              ),
           ],
         );
       },
@@ -121,6 +129,9 @@ class TimetableGrid extends StatelessWidget {
 }
 
 /// 固定的行标列（左 / 右各一）。顶部空出表头高度，与表体逐行对齐。
+///
+/// 每一行都带一层极淡底色 + 行底分隔线，贴表体那一侧再画一条竖线：
+/// 行头区从格子里「退后一档」，横向看过去能一眼咬住这是哪一节。
 class _SlotLabelColumn extends StatelessWidget {
   const _SlotLabelColumn({
     required this.rows,
@@ -134,6 +145,10 @@ class _SlotLabelColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final divider = scheme.outlineVariant.withValues(alpha: 0.45);
+    final fill = scheme.surfaceContainerHighest.withValues(alpha: 0.16);
+
     // 必须给出确定宽度：Row 的非 flex 子拿到的是 0..infinity 的松约束，
     // 直接 stretch 会把无限宽度传给子节点（BoxConstraints forces an
     // infinite width）。行标宽度本来就是固定的 labelWidth。
@@ -145,9 +160,25 @@ class _SlotLabelColumn extends StatelessWidget {
         children: [
           const SizedBox(height: _headerHeight + _headerGap),
           for (var i = 0; i < rows.length; i++)
-            SizedBox(
+            Container(
               height: heights[i],
-              child: SlotLabelCell(row: rows[i], alignEnd: alignEnd),
+              decoration: BoxDecoration(
+                color: fill,
+                border: Border(
+                  bottom: BorderSide(color: divider),
+                  // 贴表体那一侧画竖线，把行头和格子分开
+                  left: alignEnd ? BorderSide(color: divider) : BorderSide.none,
+                  right: alignEnd
+                      ? BorderSide.none
+                      : BorderSide(color: divider),
+                ),
+              ),
+              child: Align(
+                alignment: alignEnd
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: SlotLabelCell(row: rows[i], alignEnd: alignEnd),
+              ),
             ),
         ],
       ),

@@ -16,9 +16,9 @@ void main() {
   final week = resolver.currentWeek();
   final schedule = resolver.resolve(week);
 
-  /// 窄视口：7 天列必然撑出横向滚动，才能验证行标是固定的。
-  Future<void> pumpGrid(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(400, 900);
+  /// 窄视口（默认 400）：7 天列必然撑出横向滚动，才能验证行标是固定的。
+  Future<void> pumpGrid(WidgetTester tester, {Size size = const Size(400, 900)}) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -106,5 +106,41 @@ void main() {
         reason: '「${row.label}」左右两侧行标的纵向位置应一致',
       );
     }
+  });
+
+  testWidgets('一屏放得下时，右侧不再显示行标', (tester) async {
+    // 900 宽足够铺下 7 天（58 + 7×98 = 744），节次始终看得见，
+    // 右侧那列纯占地方，应该省掉。
+    await pumpGrid(tester, size: const Size(900, 900));
+
+    expect(
+      find.byType(SlotLabelCell),
+      findsNWidgets(schedule.rows.length),
+      reason: '放得下时只保留左侧一列',
+    );
+    expect(
+      tester
+          .state<ScrollableState>(horizontalBody())
+          .position
+          .maxScrollExtent,
+      0,
+      reason: '这个视口本来就不该横向滚动',
+    );
+  });
+
+  testWidgets('放不下时右侧补一列，且此时确实需要滚动', (tester) async {
+    await pumpGrid(tester); // 400 宽
+
+    expect(
+      find.byType(SlotLabelCell),
+      findsNWidgets(schedule.rows.length * 2),
+    );
+    expect(
+      tester
+          .state<ScrollableState>(horizontalBody())
+          .position
+          .maxScrollExtent,
+      greaterThan(0),
+    );
   });
 }
