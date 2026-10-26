@@ -68,3 +68,12 @@ App 与博客 yiyu14.top 各一套实现，改一处必须改两处：
 - API：`ListView.cacheExtent` 在 3.47 已弃用 → `scrollCacheExtent`，类型 `ScrollCacheExtent.pixels(n)`，**`material.dart` 不导出**，要 `import 'package:flutter/rendering.dart' show ScrollCacheExtent;`。
 - 基准跑法（只有 profile 有意义；`flutter test integration_test/...` 不支持 `--profile`）：`flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`，结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。
 - 基线（macOS profile，滚动 6 个来回）：修前 build 均 1.63 / 最差 109.7ms（6 帧超预算）、raster 均 3.10 / 最差 44.1ms；修后 build 均 0.24 / 最差 2.5ms（0 帧超预算）、raster 均 1.36 / 最差 8.8ms。**回归先看「build 超预算帧数」是否为 0**。
+
+## 9. 待办页（todo，2026-10-26 完成）
+- 目录 `lib/features/todo/`：`todo_page.dart`(页面) + `todo_model.dart`(TodoItem/TodoCategory) + `todo_storage.dart`(TodoStorage 抽象 + FileTodoStorage 本地 JSON + MemoryTodoStorage 测试)。
+- **不新增依赖**：持久化用 `path_provider`(已在依赖) + `dart:convert` JSON，写应用文档目录 `todos.json`；读取失败一律返回空列表不报错。
+- 页面只返回 body，被 `HomeShell` 的 `ImmersiveScaffold` 包裹（不自套 Scaffold）。**FAB 自置于 body 内的 `Stack`**：`HomeShell` 没把 `floatingActionButton` 透传给子页，所以右下角加号按钮是 TodoPage 自己用 `Positioned` 摆的，不是 Scaffold 的 FAB。
+- 功能：统计头（X 项待完成·共 N 项）+ `SegmentedButton`(全部/进行中/已完成) 筛选 + 列表（Checkbox 完成、分类 chip、逾期红色高亮、点整条编辑、滑动删除）；新建/编辑用 `AlertDialog` + `ChoiceChip` 选分类 + `showDatePicker` 选截止日。
+- 排序：未完成在前、有截止日靠前、再按 `createdAt` 升序。`id` 用 `_generateId()`（时间戳+自增序号）防同微秒重复。
+- 测试：`test/todo_page_test.dart`，注入 `MemoryTodoStorage`，6 项（空状态/新建/完成筛选/删除/编辑/JSON 往返）。全量 132 项测试全绿。
+- 待定：备注长文是否接 keyword_highlight（当前未接）；是否需要云同步（当前纯本地，符合班级个人待办场景）。
