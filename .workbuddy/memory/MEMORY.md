@@ -3,7 +3,7 @@
 ## 1. 标识与发版
 - 工程名 **Yuki-Blog App**，显示名 **Yuki Blog**（全英），Dart 包 `yuki_blog_app`；仓库 `cixiy1/Yuki-Blog-App`（**公开**，班级个人材料 `/材料/` 已 gitignore，别 `git add -A` 误推）。
 - 应用 ID：Android `com.yiyu14.yuki_blog_app`；iOS `com.yiyu14.yukiblogapp`；**macOS `com.yiyu14.yukiblogapp.mac`**。Bundle ID 是 UTI，只允许字母/数字/连字符/点，下划线非法（macOS 报 `invalid character in Bundle Identifier`，iOS 报 `attribute 'name' is invalid`）。改标识要同步：android namespace/applicationId/源码目录/Manifest、iOS `PRODUCT_BUNDLE_IDENTIFIER`+`PRODUCT_NAME`（连带 pbxproj `TEST_HOST`、xcscheme `BuildableName`）、macOS `AppInfo.xcconfig`+pbxproj RunnerTests、web `manifest.json`/`index.html`。**别把 iOS/macOS 顺手"统一"回下划线版**。
-  - **macOS 与 iOS 绝不能同 id**：iOS 真机产物被 LaunchServices 注册成 `platform = iOS` 记录，同 id 两份解析，`open` 命中 iOS 那条返回 1 → `Failed to foreground app; open returned 1` → **窗口拉不起来/纯黑**（2026-10-24 踩过）。确认：`lsregister -dump | grep -A2 <id>` 见 `platform: iOS` 即中招；`open <app>` 退出码 1→0 即修好。
+  - **macOS 与 iOS 绝不能同 id**：iOS 真机产物被 LaunchServices 注册成 `platform = iOS`，同 id 两份解析，`open` 命中 iOS 那条返回 1 → `Failed to foreground app; open returned 1` → **窗口拉不起来/纯黑**。确认：`lsregister -dump | grep -A2 <id>` 见 `platform: iOS` 即中招；`open` 退出码 1→0 即修好。
 - 发版：改 `pubspec.yaml` version → Conventional Commits 推送 → `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions 自动测试+构建+发 Release（App 内更新弹窗读该 Release）。
 - 命名铁律：不要中英文夹杂。
 
@@ -28,10 +28,10 @@
 `lib/widgets/immersive_app_bar.dart`（`ImmersiveGlassLayer` / `ImmersiveAppBar implements PreferredSizeWidget` / `immersiveProgressOf` / `kImmersive*` 常量与 Key）+ `lib/widgets/immersive_scaffold.dart`（抽屉 / 滚动监听 / 路由切换复位）。
 配方照网页版 Firefly semifull：贴顶全透明 → 滚过 **50px** → `card-bg 45%` + 整条 `blur(20px)` + **仅顶端**一条高光阴影线（底发丝线 2026-10-19 已按要求永久删除），过渡 **360ms `Cubic(0.22,1,0.36,1)`**，进度**二值化**（不跟手）。
 - ① 别用 `Scaffold.appBar` + `AppBar.flexibleSpace` 承载铺满型内容：flexibleSpace 挂在 `OverflowBox(maxHeight: infinity)` 下，`StackFit.expand`/`Positioned.fill` 拿到无界高度 → `BackdropFilter` 被撑到全屏。自己实现 `PreferredSizeWidget` + `SizedBox(height: kToolbarHeight + 状态栏高)`。
-- ② **Web 不需要关模糊**（旧结论「Web 不裁剪 BackdropFilter」已推翻，CanvasKit 裁剪正常）。整页糊的真凶是 ①。教训：别把「修完 A 后症状也消失」当成「B 也确认是 bug」。Web 断言 `flutter test --platform chrome <用例>`。
+- ② **Web 不需要关模糊**（旧结论「Web 不裁剪 BackdropFilter」已推翻，CanvasKit 裁剪正常）；整页糊的真凶是 ①。**别把「修完 A 后症状也消失」当成「B 也确认是 bug」**。Web 断言 `flutter test --platform chrome <用例>`。
 - ③ 玻璃要看得见，内容必须从标题栏底下穿过：`extendBodyBehindAppBar: true`，但挂 appBar 会把 body 的 `MediaQuery.padding.top` 清 0 → 组件自己补回；写死 padding 的页面要自己加 `MediaQuery.paddingOf(context).top`，根部 `SafeArea` 必须 `top: false`。
 - ④ **模糊整条统一**（2026-10-24 起，用户明确推翻渐进）：一层 `BackdropFilter` σ=20 + 一层 45% `surface` 底色。`ImmersiveGlassLayer` 是 **Stateless**，不需要 `BackdropGroup`/`BackdropKey`（只一层，引擎本就只取样一次）。
-  - **渐进模糊已废弃，别再自作聪明加回来**：`ImageFilter.blur` 的 σ 恒定，纵向渐变只能横切条带逼近，接缝必然可见（过渡宽度 ≈ 2.56·σ，Δσ=6 约 15px 横线）。`ShaderMask`/`Opacity` 包 `BackdropFilter` 会引入 saveLayer → backdrop 取不到样，走不通。
+  - **渐进模糊已废弃，别再自作聪明加回来**：σ 恒定，纵向渐变只能横切条带逼近，接缝必然可见（过渡宽度 ≈ 2.56·σ，Δσ=6 约 15px 横线）。`ShaderMask`/`Opacity` 包 `BackdropFilter` 会引入 saveLayer → backdrop 取不到样。
   - 回归：`test/immersive_glass_blur_test.dart`（原生 + Chrome）量 10%→90% 过渡宽度（阈值穿越点亚像素插值）；结构断言在 `test/immersive_app_bar_test.dart`。
 - 左侧按钮取用顺序：`leading` > `onMenu` > Scaffold 抽屉 > 返回键；开抽屉用 `GlobalKey<ScaffoldState>`，**别在创建 Scaffold 的 context 上调 `Scaffold.of`**。
 
@@ -59,14 +59,12 @@ App 与博客 yiyu14.top 各一套实现，改一处必须改两处：
 - 代理选择性抽风：github 的 `info/refs?service=git-receive-pack` 间歇 000，同时刻其它站点 200。**别一看到 000/502 就判断网**，先 `curl -o /dev/null -w "%{http_code}"` 探，再循环重试 push（1～10 次内成）。
 - `open_file_plus` 不可用：3.4.1+1 仍在用 v1 `PluginRegistry.Registrar`，Flutter 3.47 已删该类 → 编译失败。**别换回 open_file_plus**；`open_filex` 5.0.0 正常。
 - 别手动删 Flutter SDK 的 `compileKotlin/classpath-snapshot` 再跑 `android/gradlew`：会用 PATH 上 JDK 27 重编 `:gradle`，报 `Unsupported class file major version 71`。验证 Android 编译一律走 `flutter build apk`。
-- `.widget_preview/` 写死绝对路径：项目搬到 `~/Documents/gdmec/projects/2615/myclass` 后，`pubspec.yaml`（`dependency_overrides` 的 path）、`pubspec.lock`、`preview_manifest.json`、`lib/src/dtd/dtd_connection_info.dart` 四处仍是旧路径 → `could not find package myclass`（exit 66）。改这四处 + 删 `.dart_tool`/`build` + 重跑 `flutter pub get --no-example`。**`dependency_overrides` 的键必须是包名 `yuki_blog_app`**。该目录被 gitignore。
+- `.widget_preview/` 写死绝对路径（项目搬过家）：`pubspec.yaml` 的 `dependency_overrides` path、`pubspec.lock`、`preview_manifest.json`、`lib/src/dtd/dtd_connection_info.dart` 四处，改完删 `.dart_tool`/`build` 重跑 `flutter pub get --no-example`。**`dependency_overrides` 键必须是包名 `yuki_blog_app`**。该目录被 gitignore。
 - 截图回归：`RepaintBoundary.toImage` 在 `testWidgets` 的 fake async 里**永久挂起**，必须包 `tester.runAsync`。macOS 无 `timeout` 命令；zsh 下 `rm -f /tmp/x_*.png` 无匹配会报 `no matches found` 并中断整条命令链。
 
 ## 8. 性能与滚动基准
 - **禁止「滚动页里嵌限高滚动框」**：浏览器会把滚到头的滚动链式传给父级，Flutter 不会（`pointerSignalResolver` 只交给一个命中者，内层注册在先就赢），光标停在内层上页面彻底滚不动（量法：`TestPointer(kind: trackpad)` + `pointer.scroll`）。「数据更新历」已改**折叠 4 条 + 展开全部**（`ChangelogPanel.collapsedCount`，全量 51 条不再一次全建）。以后长列表面板都按这个来，别照搬网页版。
 - **课表页滚动卡顿（2026-10-24 修）**三成因：`ListView` 默认 `cacheExtent` 只有 250（滑两屏就回收网格，单帧 build 30~110ms）→ `scrollCacheExtent: ScrollCacheExtent.pixels(800)`；`buildKeywordSpans` 每次都全量重算 → 按 `(content, isDark, tiered, baseStyle)` 缓存 256 条 FIFO；更新历每行 `IntrinsicHeight` layout 两遍 → 改 `Stack` + `Positioned(top/bottom)` 拉伸（`StackFit.passthrough` 保宽度）。
 - API：`ListView.cacheExtent` 在 3.47 已弃用 → `scrollCacheExtent`，类型 `ScrollCacheExtent.pixels(n)`，**`material.dart` 不导出**，要 `import 'package:flutter/rendering.dart' show ScrollCacheExtent;`。
-- 基准跑法（只有 profile 数据有意义；`flutter test integration_test/...` 不支持 `--profile`）：
-  `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`
-  结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。
+- 基准跑法（只有 profile 有意义；`flutter test integration_test/...` 不支持 `--profile`）：`flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`，结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。
 - 基线（macOS profile，滚动 6 个来回）：修前 build 均 1.63 / 最差 109.7ms（6 帧超预算）、raster 均 3.10 / 最差 44.1ms；修后 build 均 0.24 / 最差 2.5ms（0 帧超预算）、raster 均 1.36 / 最差 8.8ms。**回归先看「build 超预算帧数」是否为 0**。
