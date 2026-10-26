@@ -69,11 +69,12 @@ App 与博客 yiyu14.top 各一套实现，改一处必须改两处：
 - 基准跑法（只有 profile 有意义；`flutter test integration_test/...` 不支持 `--profile`）：`flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`，结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。
 - 基线（macOS profile，滚动 6 个来回）：修前 build 均 1.63 / 最差 109.7ms（6 帧超预算）、raster 均 3.10 / 最差 44.1ms；修后 build 均 0.24 / 最差 2.5ms（0 帧超预算）、raster 均 1.36 / 最差 8.8ms。**回归先看「build 超预算帧数」是否为 0**。
 
-## 9. 待办页（todo，2026-10-26 完成）
-- 目录 `lib/features/todo/`：`todo_page.dart`(页面) + `todo_model.dart`(TodoItem/TodoCategory) + `todo_storage.dart`(TodoStorage 抽象 + FileTodoStorage 本地 JSON + MemoryTodoStorage 测试)。
-- **不新增依赖**：持久化用 `path_provider`(已在依赖) + `dart:convert` JSON，写应用文档目录 `todos.json`；读取失败一律返回空列表不报错。
-- 页面只返回 body，被 `HomeShell` 的 `ImmersiveScaffold` 包裹（不自套 Scaffold）。**FAB 自置于 body 内的 `Stack`**：`HomeShell` 没把 `floatingActionButton` 透传给子页，所以右下角加号按钮是 TodoPage 自己用 `Positioned` 摆的，不是 Scaffold 的 FAB。
-- 功能：统计头（X 项待完成·共 N 项）+ `SegmentedButton`(全部/进行中/已完成) 筛选 + 列表（Checkbox 完成、分类 chip、逾期红色高亮、点整条编辑、滑动删除）；新建/编辑用 `AlertDialog` + `ChoiceChip` 选分类 + `showDatePicker` 选截止日。
-- 排序：未完成在前、有截止日靠前、再按 `createdAt` 升序。`id` 用 `_generateId()`（时间戳+自增序号）防同微秒重复。
-- 测试：`test/todo_page_test.dart`，注入 `MemoryTodoStorage`，6 项（空状态/新建/完成筛选/删除/编辑/JSON 往返）。全量 132 项测试全绿。
-- 待定：备注长文是否接 keyword_highlight（当前未接）；是否需要云同步（当前纯本地，符合班级个人待办场景）。
+## 9. 待办页（todo，2026-10-26 完成 + 自动拉取增强）
+- 目录 `lib/features/todo/`：`todo_page.dart`(页面) + `todo_model.dart`(TodoItem/TodoCategory/TodoSource) + `todo_storage.dart`(TodoStorage + TodoStore + FileTodoStorage + MemoryTodoStorage)；远端源 `lib/core/todo_repository.dart`(NetworkTodoRemoteSource + parseTodoHtml)。
+- **自动拉取**：打开即拉取博客《待办清单》文章 `https://yiyu14.top/posts/todo/`（回退 raw.githubusercontent.com / cdn.jsdelivr.net 的 `src/content/posts/todo.md`，二者都含 `.todo-root` HTML 结构），用 `html` 包（**新增依赖 ^0.15.4**）解析成远端待办项（data-todo-id / 标题 / 分组→分类 / .todo-status 截止 / .todo-note 备注 / .todo-subhead 子标题上下文）。**不另建 JSON、不碰博客仓库、不触发上线**——直接吃那篇文章。
+- **版本管理合并**：远端决定「有哪些任务 + 标题/分类/截止/备注」；本地保留 ①完成状态 ②自建项(source=local) ③对远端项的删除(墓碑 `deletedRemoteIds`)。合并：本地自建项原样保留；远端项按 `remoteId` 匹配刷新内容、保留 done；远端已移除的项丢弃；墓碑项不再复活。`TodoItem` 增 `source/remoteId/dueLabel`，`dueText()` 优先显示远端原文。
+- 排序：未完成在前、有截止日(`dueDate` 或标签解析出的日期)靠前、再按 `createdAt`。`id`=时间戳+自增；远端项 id=`remote-<data-todo-id>`。
+- 交互：统计头 + `SegmentedButton` 筛选 + 列表(Checkbox/分类 chip/逾期红/点整条编辑/滑动删除) + 右下角 `Stack` 内 FAB（HomeShell 不透传 Scaffold.FAB）；**头部加手动同步按钮 + 同步状态(已同步/同步中/离线)，列表套 `RefreshIndicator` 下拉刷新**。编辑远端项会转为本地自建(source=local)以免被覆盖。离线回退上次合并的本地数据。
+- FAB 仍是 body 内 `Positioned`（非 Scaffold FAB）；页面只返回 body，被 `HomeShell` 的 `ImmersiveScaffold` 包裹。
+- 测试：`test/todo_page_test.dart`(注入 MemoryTodoStorage/FakeRemote，空态/新建/完成筛选/删除/编辑/自动拉取/离线/墓碑复活/序列化往返) + `test/todo_repository_test.dart`(解析器，含真实文章结构样例)。全量 140 项测试全绿。
+- 待定：备注长文是否接 keyword_highlight（当前未接）；远端无「完成态」概念（博客侧 done 在 localStorage，App 不读），完成态纯本地。
