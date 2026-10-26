@@ -53,9 +53,16 @@ class TimetableGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dayCount = schedule.days.isEmpty ? 1 : schedule.days.length;
-        // 左右各一列时段行标，始终显示：横向滚动到周三以后，
-        // 两边都能对上「第几节 / 几点到几点」，不用滚回去核对。
-        final available = constraints.maxWidth - SchedulePalette.labelWidth * 2;
+        // 只有「一屏就放得下、不用横向滚动」时才省掉右侧行标：
+        // 放得下就说明节次始终看得见，右边再来一列纯属占地；
+        // 放不下则必须留，否则滚到周三以后就没有节次可对照了。
+        final fitsWithoutScroll =
+            constraints.maxWidth >=
+            SchedulePalette.labelWidth +
+                dayCount * SchedulePalette.cellMinWidth;
+        final labelColumns = fitsWithoutScroll ? 1 : 2;
+        final available =
+            constraints.maxWidth - SchedulePalette.labelWidth * labelColumns;
         final cellWidth =
             (available / dayCount).clamp(
               SchedulePalette.cellMinWidth,
@@ -108,11 +115,12 @@ class TimetableGrid extends StatelessWidget {
                 ),
               ),
             ),
-            _SlotLabelColumn(
-              rows: schedule.rows,
-              heights: rowHeights,
-              alignEnd: true,
-            ),
+            if (!fitsWithoutScroll)
+              _SlotLabelColumn(
+                rows: schedule.rows,
+                heights: rowHeights,
+                alignEnd: true,
+              ),
           ],
         );
       },
