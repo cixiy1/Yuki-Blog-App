@@ -40,7 +40,7 @@
 App 与博客 yiyu14.top 各一套实现，必须对齐：
 1. 关键词词表：`lib/features/schedule/widgets/keyword_highlight.dart` 的 `kwMap` ↔ 博客 `src/components/widget/ClassSchedule.astro` 的 `TT_KW_MAP`。
 2. 标注解析与档位：`parseAnnotations + sentenceTierOf + buildKeywordSpans` ↔ `ttParseMarks + ttSentTierOf + hlLog`。
-3. 面板布局顺序：课表网格 → **本周调整** → 通知 → 图例 → 课程详情 → 数据更新历。2026-10-24 按用户要求把「本周调整」从页尾提到**通知之上**、紧跟网格，对齐网页版 `#tt-grid` → `#tt-changes` 的位置（网页版图例在调整之后、通知之前，App 图例仍在通知后，属既有布局未动）。
+3. 面板布局顺序（2026-10-26 用户定稿）：课表网格 → **课程详情**（选中才出现）→ 通知 → **本周调整** → 图例 → 数据更新历 → 页脚。课程详情紧贴网格是为了「点哪格就在它下面看」，不用跨过通知区；通知在调整之上。**App 与网页版此处已不一致**，别按网页版 `#tt-grid → #tt-changes` 再去"对齐"回来（2026-10-24 提上去、2026-10-26 又要求换回来，来回折腾过一轮）。
 4. 数据文件 `assets/data/schedule-2615.json` ↔ 博客 `public/assets/data/schedule-2615.json`（**必须两份 `cp` 同步**，sha256 应相同）。
 5. 同格取格优先级（一格只显示一条）：App `ResolvedEntry.cellPriority` + `resolve()` 的 `cells` 索引 ↔ 博客 `render()` 的 `cellRank`；规则＝**本周实际发生（有课/停课/新增）> 晚自习 > 非本周占位**，同级后者胜。
 - App 课表数据**网络优先（yiyu14.top）+ 打包资源兜底**，纯数据更新不必发新 APK；但打包那份仍需按 4 同步（否则断网用户看旧课表），且同步后测试里写死的数据量断言（课数/overrides/通知条数/第 N 周列集合）要一起改。定位格子按 `entry.key`，别用 `find.byType(CourseCell).first`。
