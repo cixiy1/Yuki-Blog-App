@@ -36,24 +36,28 @@ void main() {
     await tester.pumpWidget(widget);
     await TestWidgetsFlutterBinding.instance
         .setSurfaceSize(const Size(420, 2000));
+    // setSurfaceSize 是 binding 级的覆盖，优先级高于 tester.view.physicalSize，
+    // 不复位会漏给后面的用例：视口还是 2000 高，页面撑不满就滚不动，
+    // jumpTo 被夹到 0，沉浸标题栏那类「滚过阈值才出玻璃」的断言必挂。
+    addTearDown(() => TestWidgetsFlutterBinding.instance.setSurfaceSize(null));
     await tester.pumpAndSettle();
   }
 
   testWidgets('动态课程表首屏渲染', (tester) async {
     await pumpTall(tester, wrapApp());
 
-    // 头部 / 周条 / 本周调整 / 通知 / 图例
+    // 头部 / 周条 / 通知 / 本周调整 / 图例
     expect(find.text('软件2615'), findsOneWidget);
     expect(find.text('第 $realWeek 周'), findsOneWidget);
     expect(find.text('通知'), findsOneWidget);
     expect(find.text('有课'), findsWidgets); // 图例
     expect(find.text('本周调整'), findsOneWidget);
 
-    // 面板顺序对齐网页版：本周调整紧跟课表网格，排在通知之上。
+    // 面板顺序：通知在上、本周调整在下。
     expect(
-      tester.getTopLeft(find.text('本周调整')).dy,
-      lessThan(tester.getTopLeft(find.text('通知')).dy),
-      reason: '「本周调整」应在「通知」上方',
+      tester.getTopLeft(find.text('通知')).dy,
+      lessThan(tester.getTopLeft(find.text('本周调整')).dy),
+      reason: '「通知」应在「本周调整」上方',
     );
 
     // 表头：只渲染**有课的星期列**（resolver 的 days =「数据里出现过的
@@ -164,6 +168,13 @@ void main() {
     expect(find.text('教师'), findsOneWidget);
     expect(find.text('周次'), findsOneWidget);
 
+    // 详情紧贴网格，排在通知之上（点哪格就在它下面看，不用跨过通知区）
+    expect(
+      tester.getTopLeft(find.byType(CourseDetailPanel)).dy,
+      lessThan(tester.getTopLeft(find.text('通知')).dy),
+      reason: '课程详情应在「通知」上方',
+    );
+
     // 再点同一格收起
     await tester.tap(firstCell);
     await tester.pumpAndSettle();
@@ -238,11 +249,17 @@ void main() {
     expect(find.text('第 5 周'), findsOneWidget);
     expect(find.textContaining('第 5 周无课安排'), findsOneWidget);
   });
-
   testWidgets('套沉浸标题栏后：首屏避开标题栏，滚动时内容钻到它下面', (tester) async {
     // 回归：Scaffold 挂了 appBar 会把 body 的 MediaQuery.padding.top 清成 0，
     // 而 ListView 又只在 padding 为 null 时自动套用 MediaQuery 留白 ——
     // 课表页是显式 padding，所以必须自己补上标题栏高度，否则首屏内容会被压住。
+    //
+    // 视口显式钉死并复位：前面的用例用 pumpTall 把测试面拉到 420x2000，
+    // 那份尺寸会残留到后续用例，页面撑不满视口就滚不动，jumpTo 直接失效。
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(MaterialApp(
       home: ImmersiveScaffold(
         title: '动态课程表',
@@ -254,15 +271,21 @@ void main() {
     final header = find.text('软件2615');
     expect(tester.getTopLeft(header).dy, greaterThanOrEqualTo(kToolbarHeight));
 
+    // 纵向列表 = 页面自己那个（横向课表网格也是 Scrollable，按轴向挑）
+    final verticalList = find
+        .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down)
+        .first;
+    final position = tester.state<ScrollableState>(verticalList).position;
+    expect(position.maxScrollExtent, greaterThan(60),
+        reason: '页面要能滚动，否则这个用例测不到折叠进度');
+
     // 往上一推，班级名就钻进标题栏底下（毛玻璃这才有东西可糊）。
     // 只滚 60px：标题行仍半露在视口里不会被回收，又已经进入标题栏那条带；
     // 用 jumpTo 而不是 drag —— drag 抬手的惯性会把首屏几行直接甩出缓存区。
-    tester
-        .state<ScrollableState>(find.byType(Scrollable).first)
-        .position
-        .jumpTo(60);
+    position.jumpTo(60);
     await tester.pump();
-    expect(tester.getTopLeft(find.text('软件2615')).dy, lessThan(kToolbarHeight));
+    expect(tester.getTopLeft(header).dy, lessThan(kToolbarHeight));
 
     await tester.pumpAndSettle();
     // 整条统一模糊：只有一层（分带写法已废）
