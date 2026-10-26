@@ -42,7 +42,7 @@ App 与博客 yiyu14.top 各一套实现，改一处必须改两处：
 3. 面板布局顺序（2026-10-26 用户定稿）：课表网格 → **课程详情**（选中才出现）→ 通知 → **本周调整** → 图例 → 数据更新历 → 页脚。详情紧贴网格是「点哪格就在它下面看」；通知在调整之上。**App 与网页版此处已不一致**，别按网页版 `#tt-grid → #tt-changes` 再去"对齐"回来（来回折腾过一轮）。
 4. 数据文件 `assets/data/schedule-2615.json` ↔ 博客 `public/assets/data/schedule-2615.json`（**必须两份 `cp` 同步**，sha256 相同）。
 5. 同格优先级（一格只显示一条）：App `ResolvedEntry.cellPriority` + `resolve()` 的 `cells` ↔ 博客 `render()` 的 `cellRank`；规则＝**本周实际发生（有课/停课/新增）> 晚自习 > 非本周占位**，同级后者胜。
-- **网格左右两侧各一列作息行标**（2026-10-26 起）：`TimetableGrid` = `Row[左行标列(固定), Expanded(横向滚动表体), 右行标列(固定)]`，只有中间表体滚 —— 否则滚到周三以后左列滑出屏幕，看不出这行是第几节。`SlotLabelCell.alignEnd` 让右列文字贴右。两列都空出 `_headerHeight(28) + _headerGap(2)`，与表头/表体逐行对齐；列宽自适应按 `maxWidth - labelWidth*2` 算。测试 `test/timetable_grid_test.dart`。
+- **作息行标按需左右各一列**（2026-10-26）：`TimetableGrid` = `Row[左行标列(固定), Expanded(横向滚动表体), 右行标列(固定)]`，只有中间表体滚。**右侧那条只在放不下时出现**：`maxWidth >= labelWidth + 天数×cellMinWidth` 就省掉（放得下时节次始终可见），此时列宽按 `maxWidth - labelWidth` 算；否则按 `- labelWidth*2`。`SlotLabelCell.alignEnd` 让右列贴右。两列都空出 `_headerHeight(28) + _headerGap(2)`。行头每行带淡底 + 行底分隔线 + 贴表体竖线；节次 11.5/w700，时间 `tabularFigures` 单行 + `FittedBox` 缩放。测试 `test/timetable_grid_test.dart`（含 900/400 两种视口的列数断言）。
   - 坑：`Row` 的非 flex 子拿到 `0..infinity` 松约束，行标 Column 直接 `crossAxisAlignment: stretch` 会把无限宽度传给子节点 → `BoxConstraints forces an infinite width`。外面包 `SizedBox(width: labelWidth)`。
 - App 课表数据**网络优先（yiyu14.top）+ 打包资源兜底**，纯数据更新不必发新 APK；但打包那份仍需按 4 同步，且同步后测试里写死的数据量断言（课数/overrides/通知条数/第 N 周列集合）要一起改。定位格子按 `entry.key`，别用 `find.byType(CourseCell).first`。
 - 对齐手段：抽 astro 函数到 node 跑用例 + Dart/JS 分档对拍。
