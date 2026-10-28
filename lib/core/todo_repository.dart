@@ -14,6 +14,7 @@ class RemoteTodo {
     this.note,
     required this.category,
     this.subject,
+    this.group,
     this.dueLabel,
     this.dueDate,
   });
@@ -23,8 +24,13 @@ class RemoteTodo {
   final String? note;
   final TodoCategory category;
 
-  /// 科目 / 子类（来自文章的 `.todo-subhead`），用于 App 端按科目分组。
+  /// 科目 / 子类（来自文章的 `.todo-subhead`），用于组内按科目子分区。
   final String? subject;
+
+  /// 所属的人 / 组（来自文章的 `.todo-group-title`，如「雪穗的待办」
+  /// 「软件2615同学待办」），App 端最顶层分组维度，与网页版一致。
+  final String? group;
+
   final String? dueLabel;
   final DateTime? dueDate;
 }
@@ -113,9 +119,9 @@ List<RemoteTodo> parseTodoHtml(String html) {
   final out = <RemoteTodo>[];
   for (final group in root.querySelectorAll('.todo-group')) {
     final titleEl = group.querySelector('.todo-group-title');
-    final groupTitle = titleEl?.text.trim() ?? '';
-    final category = _mapCategory(groupTitle);
-    _walk(group, category, null, null, out);
+    final groupTitle = titleEl?.text.trim();
+    final category = _mapCategory(groupTitle ?? '');
+    _walk(group, category, groupTitle, null, null, out);
   }
   return out;
 }
@@ -123,6 +129,7 @@ List<RemoteTodo> parseTodoHtml(String html) {
 void _walk(
   Element node,
   TodoCategory category,
+  String? group,
   String? subhead,
   String? note,
   List<RemoteTodo> out,
@@ -132,16 +139,16 @@ void _walk(
   for (final child in node.children) {
     if (child.classes.contains('todo-subhead')) {
       subhead = child.text.trim();
-      _walk(child, category, subhead, note, out);
+      _walk(child, category, group, subhead, note, out);
     } else if (child.classes.contains('todo-note')) {
       note = child.text.trim();
-      _walk(child, category, subhead, note, out);
+      _walk(child, category, group, subhead, note, out);
     } else if (child.classes.contains('todo-item')) {
-      final item = _extractItem(child, category, subhead, note);
+      final item = _extractItem(child, category, group, subhead, note);
       if (item != null) out.add(item);
       // 不向 item 内部递归（其后代是 label 细节，不是待办项）
     } else {
-      _walk(child, category, subhead, note, out);
+      _walk(child, category, group, subhead, note, out);
     }
   }
 }
@@ -149,6 +156,7 @@ void _walk(
 RemoteTodo? _extractItem(
   Element item,
   TodoCategory category,
+  String? group,
   String? subhead,
   String? note,
 ) {
@@ -177,6 +185,7 @@ RemoteTodo? _extractItem(
     note: mergedNote,
     category: category,
     subject: subhead,
+    group: group,
     dueLabel: status,
     dueDate: status == null ? null : _parseDueDate(status),
   );

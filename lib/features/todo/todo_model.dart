@@ -30,6 +30,7 @@ class TodoItem {
     required this.title,
     this.note,
     this.subject,
+    this.group,
     this.category = TodoCategory.other,
     this.done = false,
     DateTime? createdAt,
@@ -43,9 +44,25 @@ class TodoItem {
   final String title;
   final String? note;
 
-  /// 科目 / 子类（来自博客文章的 `.todo-subhead`），用于按科目分组展示。
-  /// 本地自建项可留空，分组时回退到 [category] 标签。
+  /// 科目 / 子类（来自博客文章的 `.todo-subhead`），用于组内按科目子分区展示。
   final String? subject;
+
+  /// 所属的人 / 组（来自博客文章的 `.todo-group-title`，如「雪穗的待办」
+  /// 「软件2615同学待办」）。这是与网页版一致的最顶层分组维度。
+  /// 本地自建项可留空，展示时回退到 [category] 对应的默认组标签。
+  final String? group;
+
+  /// 最顶层分组展示用的标签：优先用 [group]，缺省回退到分类默认组名。
+  String get groupLabel => group ?? _defaultGroupFor(category);
+
+  /// 分类对应的默认组名（本地自建项、或无 group 信息时的兜底分组）。
+  static String _defaultGroupFor(TodoCategory c) => switch (c) {
+        TodoCategory.classAffairs => '班级事务',
+        TodoCategory.party => '党务',
+        TodoCategory.personal => '我的待办',
+        TodoCategory.other => '其他',
+      };
+
   final TodoCategory category;
   final bool done;
   final DateTime createdAt;
@@ -67,6 +84,7 @@ class TodoItem {
     String? title,
     String? note,
     String? subject,
+    String? group,
     TodoCategory? category,
     bool? done,
     DateTime? dueDate,
@@ -80,6 +98,7 @@ class TodoItem {
         title: title ?? this.title,
         note: note ?? this.note,
         subject: subject ?? this.subject,
+        group: group ?? this.group,
         category: category ?? this.category,
         done: done ?? this.done,
         createdAt: createdAt,
@@ -101,6 +120,7 @@ class TodoItem {
         'title': title,
         'note': note,
         'subject': subject,
+        'group': group,
         'category': category.name,
         'done': done,
         'createdAt': createdAt.toIso8601String(),
@@ -128,6 +148,7 @@ class TodoItem {
       title: json['title'] as String,
       note: json['note'] as String?,
       subject: json['subject'] as String?,
+      group: json['group'] as String?,
       category: category,
       done: json['done'] as bool? ?? false,
       createdAt: createdRaw == null ? null : DateTime.tryParse(createdRaw),

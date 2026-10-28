@@ -58,6 +58,15 @@ void main() {
     expect(party.subject, contains('第二批入党申请谈话'));
   });
 
+  test('分组标题解析为人/组(group)', () {
+    final items = parseTodoHtml(_sampleHtml);
+    final intro = items.firstWhere((e) => e.id == 'intro');
+    expect(intro.group, '雪穗的待办');
+
+    final eng = items.firstWhere((e) => e.id == 'eng-w7-unit1');
+    expect(eng.group, '软件2615同学待办');
+  });
+
   test('标题去掉状态文案、保留纯净文本', () {
     final items = parseTodoHtml(_sampleHtml);
     final eng = items.firstWhere((e) => e.id == 'eng-w7-unit1');

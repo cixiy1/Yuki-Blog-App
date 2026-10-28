@@ -19,8 +19,8 @@ class FakeRemote implements TodoRemoteSource {
   }
 }
 
-RemoteTodo remote(String id, String title, TodoCategory c) =>
-    RemoteTodo(id: id, title: title, category: c);
+RemoteTodo remote(String id, String title, TodoCategory c, {String? group}) =>
+    RemoteTodo(id: id, title: title, category: c, group: group);
 
 void main() {
   late MemoryTodoStorage storage;
@@ -185,32 +185,36 @@ void main() {
     expect(loaded.items.first.toJson()['category'], 'party');
   });
 
-  testWidgets('按科目(subject)分组展示，无科目项回退大类', (tester) async {
+  testWidgets('按人/组(group)顶层分块、组内按科目(subject)子分区', (tester) async {
     final r = FakeRemote([
       RemoteTodo(
         id: 'a',
         title: '英语课文朗读',
         category: TodoCategory.classAffairs,
+        group: '软件2615同学待办',
         subject: '英语作业',
       ),
       RemoteTodo(
         id: 'b',
         title: 'Java 实验报告',
         category: TodoCategory.classAffairs,
+        group: '软件2615同学待办',
         subject: 'Java程序设计',
       ),
       RemoteTodo(
         id: 'c',
         title: '写个人介绍',
         category: TodoCategory.personal,
+        group: '雪穗的待办',
       ),
     ]);
     await pumpTodo(tester, remote: r);
-    // 两个科目各自成组
+    // 顶层按人/组分块
+    expect(find.text('软件2615同学待办'), findsOneWidget);
+    expect(find.text('雪穗的待办'), findsOneWidget);
+    // 组内按科目子分区
     expect(find.text('英语作业'), findsOneWidget);
     expect(find.text('Java程序设计'), findsOneWidget);
-    // 无科目项按大类「个人」兜底成组
-    expect(find.text('个人'), findsOneWidget);
     // 条目标题照常显示
     expect(find.text('英语课文朗读'), findsOneWidget);
     expect(find.text('写个人介绍'), findsOneWidget);

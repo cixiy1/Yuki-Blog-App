@@ -19,7 +19,8 @@ String _generateId() =>
 ///   自建任务、对远端任务的删除（墓碑）都持久化保留；
 /// - 离线时回退到上一次合并后的本地数据，不丢本地改动。
 ///
-/// 布局参考博客 Firefly 主题的待办组件：按分类分组、圆形成勾选框、顶部进度条、
+/// 布局参考博客 Firefly 主题的待办组件：按「人 / 组」（博客 `.todo-group-title`）
+/// 顶层分组、组内按科目（`.todo-subhead`）子分区，圆形成勾选框、顶部进度条、
 /// 截止日胶囊徽标、备注左边线。
 class TodoPage extends StatefulWidget {
   const TodoPage({super.key, this.storage, this.remote});
@@ -96,6 +97,8 @@ class _TodoPageState extends State<TodoPage> {
         title: r.title,
         note: r.note,
         category: r.category,
+        subject: r.subject,
+        group: r.group,
         dueLabel: r.dueLabel,
         dueDate: r.dueDate,
       ));
@@ -111,6 +114,7 @@ class _TodoPageState extends State<TodoPage> {
         note: r.note,
         category: r.category,
         subject: r.subject,
+        group: r.group,
         dueLabel: r.dueLabel,
         dueDate: r.dueDate,
         source: TodoSource.remote,
@@ -202,33 +206,59 @@ class _TodoPageState extends State<TodoPage> {
     return list;
   }
 
-  /// 分组维度：先按大类（班级事务/党务/个人/其他），大类内再按科目
-  /// （[TodoItem.subject]，来自博客文章的 `.todo-subhead`）细分；无科目的
-  /// 项用大类标签兜底。对应网页「作者组 → 科目 → 条目」的三级结构。
-  List<(String title, TodoCategory category, bool isSubject, List<TodoItem>)>
-      get _groups {
-    final result = <(String, TodoCategory, bool, List<TodoItem>)>[];
-    for (final cat in TodoCategory.valuesOrdered) {
-      final items = _visible.where((e) => e.category == cat).toList();
+  /// 分组维度，与网页版一致：
+  /// ① 最顶层按「人 / 组」([TodoItem.groupLabel]，来自博客 `.todo-group-title`
+  /// 如「雪穗的待办」「软件2615同学待办」) 分块；
+  /// ② 组内再按科目 ([TodoItem.subject]，来自 `.todo-subhead`) 子分区；
+  /// 无科目的项归入该组下的「其他」子区。
+  List<_PersonGroupData> get _groups {
+    final titles = <String>[];
+    for (final e in _items) {
+      final g = e.groupLabel;
+      if (!titles.contains(g)) titles.add(g);
+    }
+    final ordered = _orderGroups(titles);
+
+    final result = <_PersonGroupData>[];
+    for (final g in ordered) {
+      final items = _visible.where((e) => e.groupLabel == g).toList();
       if (items.isEmpty) continue;
-      final bySubject = <String, List<TodoItem>>{};
-      final noSubject = <TodoItem>[];
+      final cat = items.first.category;
+
+      final subTitles = <String?>[];
+      final subMap = <String?, List<TodoItem>>{};
       for (final e in items) {
         final s = e.subject;
-        if (s != null && s.isNotEmpty) {
-          (bySubject[s] ??= []).add(e);
-        } else {
-          noSubject.add(e);
+        if (!subMap.containsKey(s)) {
+          subMap[s] = <TodoItem>[];
+          subTitles.add(s);
         }
+        subMap[s]!.add(e);
       }
-      bySubject.forEach((s, list) {
-        result.add((s, cat, true, list));
-      });
-      if (noSubject.isNotEmpty) {
-        result.add((cat.label, cat, false, noSubject));
-      }
+      result.add(_PersonGroupData(
+        title: g,
+        category: cat,
+        subs: [for (final s in subTitles) (s, subMap[s]!)],
+      ));
     }
     return result;
+  }
+
+  /// 组展示顺序：优先网页已知的「人 / 组」固定顺序，其余按名称排序置于其后
+  /// （本地自建的「我的待办」「其他」等自然落在末尾）。
+  static const List<String> _knownGroupOrder = [
+    '雪穗的待办',
+    '班长待办清单',
+    '软件2615同学待办',
+  ];
+  List<String> _orderGroups(List<String> titles) {
+    final known =
+        _knownGroupOrder.where((t) => titles.contains(t)).toList();
+    final rest = titles
+        .where((t) => !_knownGroupOrder.contains(t))
+        .toList()
+      ..sort();
+    return [...known, ...rest];
   }
 
   DateTime? _dateFromLabel(String? label) =>
@@ -295,13 +325,12 @@ class _TodoPageState extends State<TodoPage> {
                 else if (groups.isEmpty)
                   _EmptyState(filter: _filter, offline: _offline)
                 else
-                  for (final (title, category, isSubject, items) in groups)
-                    _CategoryGroup(
-                      key: Key('group-$title'),
-                      title: title,
-                      category: category,
-                      isSubjectGroup: isSubject,
-                      items: items,
+                  for (final g in groups)
+                    _PersonGroup(
+                      key: Key('group-${g.title}'),
+                      title: g.title,
+                      category: g.category,
+                      subs: g.subs,
                       onToggle: _toggle,
                       onEdit: (item) {
                         _showEditor(initial: item);
@@ -481,15 +510,28 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// 分组区块：淡主色容器 + 主色左边线标题。科目组在标题旁显示大类 chip，
-/// 对应网页「科目」区块的视觉。
-class _CategoryGroup extends StatelessWidget {
-  const _CategoryGroup({
+/// 分组数据：顶层人 / 组标题 + 分类（用于着色）+ 组内按科目的子分区。
+class _PersonGroupData {
+  const _PersonGroupData({
+    required this.title,
+    required this.category,
+    required this.subs,
+  });
+
+  final String title;
+  final TodoCategory category;
+  final List<(String? subject, List<TodoItem>)> subs;
+}
+
+/// 顶层分组卡片：对应网页「作者组」区块。
+/// 卡头为「人 / 组」标题（带分类图标与计数），卡内按科目（`.todo-subhead`）
+/// 子分区罗列条目，无科目的项归入该组下的「其他」子区。
+class _PersonGroup extends StatelessWidget {
+  const _PersonGroup({
     super.key,
     required this.title,
     required this.category,
-    required this.isSubjectGroup,
-    required this.items,
+    required this.subs,
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
@@ -497,8 +539,7 @@ class _CategoryGroup extends StatelessWidget {
 
   final String title;
   final TodoCategory category;
-  final bool isSubjectGroup;
-  final List<TodoItem> items;
+  final List<(String? subject, List<TodoItem>)> subs;
   final ValueChanged<String> onToggle;
   final ValueChanged<TodoItem> onEdit;
   final ValueChanged<TodoItem> onDelete;
@@ -506,81 +547,106 @@ class _CategoryGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final total =
+        subs.fold(0, (sum, s) => sum + s.$2.length);
     return Container(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: AppTheme.spacingSm,
-      ),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.06),
+        color: scheme.primary.withValues(alpha: 0.04),
         border: Border.all(
-          color: scheme.primary.withValues(alpha: 0.22),
+          color: scheme.primary.withValues(alpha: 0.16),
         ),
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 3.5,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+          // 组头：人 / 组标题 + 分类图标 + 计数
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingMd,
+              vertical: AppTheme.spacingSm,
+            ),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(AppTheme.radiusLg - 1),
               ),
-              const SizedBox(width: AppTheme.spacingSm),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w700,
-                    color: scheme.primary,
-                  ),
-                ),
-              ),
-              if (isSubjectGroup)
-                Container(
-                  margin: const EdgeInsets.only(right: AppTheme.spacingXs),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+            ),
+            child: Row(
+              children: [
+                Icon(category.icon, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
                   child: Text(
-                    category.label,
+                    title,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
                       color: scheme.primary,
                     ),
                   ),
                 ),
-              Text(
-                '${items.length} 项',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: scheme.onSurfaceVariant,
+                Text(
+                  '$total 项',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 科目子区块
+          for (final (subject, items) in subs) ...[
+            if (subject != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppTheme.spacingMd,
+                  AppTheme.spacingSm,
+                  AppTheme.spacingMd,
+                  0,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 3,
+                      height: 13,
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      subject,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.primary.withValues(alpha: 0.85),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${items.length}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            for (final item in items)
+              _TodoTile(
+                key: Key(item.id),
+                item: item,
+                onToggle: () => onToggle(item.id),
+                onEdit: () => onEdit(item),
+                onDelete: () => onDelete(item),
+              ),
+          ],
           const SizedBox(height: AppTheme.spacingXs),
-          for (final item in items)
-            _TodoTile(
-              key: Key(item.id),
-              item: item,
-              onToggle: () => onToggle(item.id),
-              onEdit: () => onEdit(item),
-              onDelete: () => onDelete(item),
-            ),
         ],
       ),
     );
