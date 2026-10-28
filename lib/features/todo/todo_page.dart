@@ -298,9 +298,9 @@ class _TodoPageState extends State<TodoPage> {
             child: ListView(
               padding: EdgeInsets.fromLTRB(
                 AppTheme.spacingMd,
-                AppTheme.spacingSm + MediaQuery.paddingOf(context).top,
+                12 + MediaQuery.paddingOf(context).top,
                 AppTheme.spacingMd,
-                AppTheme.spacingXl + 88,
+                AppTheme.spacingXl + 96,
               ),
               children: [
                 _Header(
@@ -399,14 +399,14 @@ class _Header extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: scheme.primaryContainer,
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
               child: Icon(Icons.checklist,
-                  size: 20, color: scheme.onPrimaryContainer),
+                  size: 22, color: scheme.onPrimaryContainer),
             ),
             const SizedBox(width: AppTheme.spacingSm),
             Expanded(
@@ -433,37 +433,62 @@ class _Header extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Padding(
           padding: const EdgeInsets.only(left: 2),
           child: Text(
             syncHint,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 12,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
             ),
           ),
         ),
-        const SizedBox(height: AppTheme.spacingSm),
+        const SizedBox(height: 12),
         // 进度条：圆角轨道 + 主色填充，对应网页 .todo-progress。
         ClipRRect(
           borderRadius: BorderRadius.circular(999),
           child: LinearProgressIndicator(
             value: progress,
-            minHeight: 6,
+            minHeight: 8,
             backgroundColor: scheme.primary.withValues(alpha: 0.14),
             valueColor: AlwaysStoppedAnimation(scheme.primary),
           ),
         ),
-        const SizedBox(height: AppTheme.spacingMd),
+        const SizedBox(height: 18),
         SegmentedButton<_TodoFilter>(
           showSelectedIcon: false,
           selected: {filter},
           onSelectionChanged: (set) => onFilter(set.first),
+          style: SegmentedButton.styleFrom(
+            backgroundColor: scheme.surface,
+            foregroundColor: scheme.onSurfaceVariant,
+            selectedForegroundColor: scheme.onSecondaryContainer,
+            selectedBackgroundColor: scheme.secondaryContainer,
+            side: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+            textStyle: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: scheme.onSurface,
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            visualDensity: VisualDensity.compact,
+          ),
           segments: const [
-            ButtonSegment(value: _TodoFilter.all, label: Text('全部')),
-            ButtonSegment(value: _TodoFilter.active, label: Text('进行中')),
-            ButtonSegment(value: _TodoFilter.done, label: Text('已完成')),
+            ButtonSegment(
+              value: _TodoFilter.all,
+              label: Text('全部', maxLines: 1),
+            ),
+            ButtonSegment(
+              value: _TodoFilter.active,
+              label: Text('进行中', maxLines: 1),
+            ),
+            ButtonSegment(
+              value: _TodoFilter.done,
+              label: Text('已完成', maxLines: 1),
+            ),
           ],
         ),
       ],
@@ -550,7 +575,7 @@ class _PersonGroup extends StatelessWidget {
     final total =
         subs.fold(0, (sum, s) => sum + s.$2.length);
     return Container(
-      margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: scheme.primary.withValues(alpha: 0.04),
         border: Border.all(
@@ -565,7 +590,7 @@ class _PersonGroup extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: AppTheme.spacingMd,
-              vertical: AppTheme.spacingSm,
+              vertical: 12,
             ),
             decoration: BoxDecoration(
               color: scheme.primary.withValues(alpha: 0.08),
@@ -575,13 +600,13 @@ class _PersonGroup extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(category.icon, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
+                Icon(category.icon, size: 18, color: scheme.primary),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
                     style: TextStyle(
-                      fontSize: 15.5,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: scheme.primary,
                     ),
@@ -590,38 +615,38 @@ class _PersonGroup extends StatelessWidget {
                 Text(
                   '$total 项',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
           ),
-          // 科目子区块
-          for (final (subject, items) in subs) ...[
+          // 科目子区块（首个距组头 12，后续区块之间 16）
+          for (final (i, (subject, items)) in subs.indexed) ...[
             if (subject != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   AppTheme.spacingMd,
-                  AppTheme.spacingSm,
+                  i == 0 ? 12 : 16,
                   AppTheme.spacingMd,
-                  0,
+                  4,
                 ),
                 child: Row(
                   children: [
                     Container(
                       width: 3,
-                      height: 13,
+                      height: 14,
                       decoration: BoxDecoration(
                         color: scheme.primary,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Text(
                       subject,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                         color: scheme.primary.withValues(alpha: 0.85),
                       ),
@@ -630,7 +655,7 @@ class _PersonGroup extends StatelessWidget {
                     Text(
                       '${items.length}',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
@@ -646,7 +671,7 @@ class _PersonGroup extends StatelessWidget {
                 onDelete: () => onDelete(item),
               ),
           ],
-          const SizedBox(height: AppTheme.spacingXs),
+          const SizedBox(height: AppTheme.spacingSm),
         ],
       ),
     );
@@ -696,8 +721,8 @@ class TodoCheckCircle extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 22,
-        height: 22,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: done ? active : Colors.transparent,
@@ -707,7 +732,7 @@ class TodoCheckCircle extends StatelessWidget {
           ),
         ),
         child: done
-            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            ? const Icon(Icons.check, size: 16, color: Colors.white)
             : null,
       ),
     );
@@ -752,17 +777,17 @@ class _TodoTile extends StatelessWidget {
       onTap: onEdit,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          vertical: AppTheme.spacingSm,
-          horizontal: AppTheme.spacingXs,
+          vertical: 10,
+          horizontal: 14,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 1),
+              padding: const EdgeInsets.only(top: 2),
               child: TodoCheckCircle(done: item.done, onTap: onToggle),
             ),
-            const SizedBox(width: AppTheme.spacingSm),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -781,7 +806,7 @@ class _TodoTile extends StatelessWidget {
                     ],
                   ),
                   if (item.note != null && item.note!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.only(left: 10),
                       decoration: BoxDecoration(
@@ -806,11 +831,11 @@ class _TodoTile extends StatelessWidget {
                     ),
                   ],
                   if (dueText != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
+                        horizontal: 9,
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: dueOverdue
@@ -835,9 +860,12 @@ class _TodoTile extends StatelessWidget {
             ),
             IconButton(
               icon: Icon(Icons.delete_outline,
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                  size: 19,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45)),
               onPressed: onDelete,
               tooltip: '删除',
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             ),
           ],
