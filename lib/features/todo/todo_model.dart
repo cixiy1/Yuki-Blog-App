@@ -29,6 +29,7 @@ class TodoItem {
     required this.id,
     required this.title,
     this.note,
+    this.subject,
     this.category = TodoCategory.other,
     this.done = false,
     DateTime? createdAt,
@@ -41,6 +42,10 @@ class TodoItem {
   final String id;
   final String title;
   final String? note;
+
+  /// 科目 / 子类（来自博客文章的 `.todo-subhead`），用于按科目分组展示。
+  /// 本地自建项可留空，分组时回退到 [category] 标签。
+  final String? subject;
   final TodoCategory category;
   final bool done;
   final DateTime createdAt;
@@ -61,6 +66,7 @@ class TodoItem {
   TodoItem copyWith({
     String? title,
     String? note,
+    String? subject,
     TodoCategory? category,
     bool? done,
     DateTime? dueDate,
@@ -73,6 +79,7 @@ class TodoItem {
         id: id,
         title: title ?? this.title,
         note: note ?? this.note,
+        subject: subject ?? this.subject,
         category: category ?? this.category,
         done: done ?? this.done,
         createdAt: createdAt,
@@ -93,6 +100,7 @@ class TodoItem {
         'id': id,
         'title': title,
         'note': note,
+        'subject': subject,
         'category': category.name,
         'done': done,
         'createdAt': createdAt.toIso8601String(),
@@ -119,6 +127,7 @@ class TodoItem {
       id: json['id'] as String,
       title: json['title'] as String,
       note: json['note'] as String?,
+      subject: json['subject'] as String?,
       category: category,
       done: json['done'] as bool? ?? false,
       createdAt: createdRaw == null ? null : DateTime.tryParse(createdRaw),

@@ -13,6 +13,7 @@ class RemoteTodo {
     required this.title,
     this.note,
     required this.category,
+    this.subject,
     this.dueLabel,
     this.dueDate,
   });
@@ -21,6 +22,9 @@ class RemoteTodo {
   final String title;
   final String? note;
   final TodoCategory category;
+
+  /// 科目 / 子类（来自文章的 `.todo-subhead`），用于 App 端按科目分组。
+  final String? subject;
   final String? dueLabel;
   final DateTime? dueDate;
 }
@@ -172,6 +176,7 @@ RemoteTodo? _extractItem(
     title: title,
     note: mergedNote,
     category: category,
+    subject: subhead,
     dueLabel: status,
     dueDate: status == null ? null : _parseDueDate(status),
   );

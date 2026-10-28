@@ -184,6 +184,37 @@ void main() {
     expect(loaded.deletedRemoteIds, contains('abc'));
     expect(loaded.items.first.toJson()['category'], 'party');
   });
+
+  testWidgets('按科目(subject)分组展示，无科目项回退大类', (tester) async {
+    final r = FakeRemote([
+      RemoteTodo(
+        id: 'a',
+        title: '英语课文朗读',
+        category: TodoCategory.classAffairs,
+        subject: '英语作业',
+      ),
+      RemoteTodo(
+        id: 'b',
+        title: 'Java 实验报告',
+        category: TodoCategory.classAffairs,
+        subject: 'Java程序设计',
+      ),
+      RemoteTodo(
+        id: 'c',
+        title: '写个人介绍',
+        category: TodoCategory.personal,
+      ),
+    ]);
+    await pumpTodo(tester, remote: r);
+    // 两个科目各自成组
+    expect(find.text('英语作业'), findsOneWidget);
+    expect(find.text('Java程序设计'), findsOneWidget);
+    // 无科目项按大类「个人」兜底成组
+    expect(find.text('个人'), findsOneWidget);
+    // 条目标题照常显示
+    expect(find.text('英语课文朗读'), findsOneWidget);
+    expect(find.text('写个人介绍'), findsOneWidget);
+  });
 }
 
 /// 默认空远端，避免测试中真的去联网。

@@ -46,6 +46,18 @@ void main() {
     expect(eng.category, TodoCategory.classAffairs);
   });
 
+  test('子标题解析为科目(subject)', () {
+    final items = parseTodoHtml(_sampleHtml);
+    final intro = items.firstWhere((e) => e.id == 'intro');
+    expect(intro.subject, isNull);
+
+    final eng = items.firstWhere((e) => e.id == 'eng-w7-unit1');
+    expect(eng.subject, '英语作业');
+
+    final party = items.firstWhere((e) => e.id == 'party-talk-prep');
+    expect(party.subject, contains('第二批入党申请谈话'));
+  });
+
   test('标题去掉状态文案、保留纯净文本', () {
     final items = parseTodoHtml(_sampleHtml);
     final eng = items.firstWhere((e) => e.id == 'eng-w7-unit1');

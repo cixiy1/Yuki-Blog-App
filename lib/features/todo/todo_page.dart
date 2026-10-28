@@ -110,6 +110,7 @@ class _TodoPageState extends State<TodoPage> {
         title: r.title,
         note: r.note,
         category: r.category,
+        subject: r.subject,
         dueLabel: r.dueLabel,
         dueDate: r.dueDate,
         source: TodoSource.remote,
@@ -201,19 +202,33 @@ class _TodoPageState extends State<TodoPage> {
     return list;
   }
 
-  /// 当前筛选结果按分类分组（沿用 [TodoCategory.valuesOrdered] 顺序，
-  /// 只保留非空分组），对应网页「按组分区」的展示结构。
-  List<(TodoCategory, List<TodoItem>)> get _groups {
-    final map = <TodoCategory, List<TodoItem>>{
-      for (final c in TodoCategory.valuesOrdered) c: <TodoItem>[],
-    };
-    for (final e in _visible) {
-      map.putIfAbsent(e.category, () => <TodoItem>[]).add(e);
+  /// 分组维度：先按大类（班级事务/党务/个人/其他），大类内再按科目
+  /// （[TodoItem.subject]，来自博客文章的 `.todo-subhead`）细分；无科目的
+  /// 项用大类标签兜底。对应网页「作者组 → 科目 → 条目」的三级结构。
+  List<(String title, TodoCategory category, bool isSubject, List<TodoItem>)>
+      get _groups {
+    final result = <(String, TodoCategory, bool, List<TodoItem>)>[];
+    for (final cat in TodoCategory.valuesOrdered) {
+      final items = _visible.where((e) => e.category == cat).toList();
+      if (items.isEmpty) continue;
+      final bySubject = <String, List<TodoItem>>{};
+      final noSubject = <TodoItem>[];
+      for (final e in items) {
+        final s = e.subject;
+        if (s != null && s.isNotEmpty) {
+          (bySubject[s] ??= []).add(e);
+        } else {
+          noSubject.add(e);
+        }
+      }
+      bySubject.forEach((s, list) {
+        result.add((s, cat, true, list));
+      });
+      if (noSubject.isNotEmpty) {
+        result.add((cat.label, cat, false, noSubject));
+      }
     }
-    return [
-      for (final c in TodoCategory.valuesOrdered)
-        if (map[c]!.isNotEmpty) (c, map[c]!),
-    ];
+    return result;
   }
 
   DateTime? _dateFromLabel(String? label) =>
@@ -280,10 +295,12 @@ class _TodoPageState extends State<TodoPage> {
                 else if (groups.isEmpty)
                   _EmptyState(filter: _filter, offline: _offline)
                 else
-                  for (final (category, items) in groups)
+                  for (final (title, category, isSubject, items) in groups)
                     _CategoryGroup(
-                      key: Key('group-${category.name}'),
+                      key: Key('group-$title'),
+                      title: title,
                       category: category,
+                      isSubjectGroup: isSubject,
                       items: items,
                       onToggle: _toggle,
                       onEdit: (item) {
@@ -464,18 +481,23 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// 分类分组：淡主色容器 + 带主色左边线的组标题，对应网页 .todo-group。
+/// 分组区块：淡主色容器 + 主色左边线标题。科目组在标题旁显示大类 chip，
+/// 对应网页「科目」区块的视觉。
 class _CategoryGroup extends StatelessWidget {
   const _CategoryGroup({
     super.key,
+    required this.title,
     required this.category,
+    required this.isSubjectGroup,
     required this.items,
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
   });
 
+  final String title;
   final TodoCategory category;
+  final bool isSubjectGroup;
   final List<TodoItem> items;
   final ValueChanged<String> onToggle;
   final ValueChanged<TodoItem> onEdit;
@@ -491,9 +513,9 @@ class _CategoryGroup extends StatelessWidget {
         vertical: AppTheme.spacingSm,
       ),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.05),
+        color: scheme.primary.withValues(alpha: 0.06),
         border: Border.all(
-          color: scheme.primary.withValues(alpha: 0.13),
+          color: scheme.primary.withValues(alpha: 0.22),
         ),
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
       ),
@@ -503,7 +525,7 @@ class _CategoryGroup extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 3,
+                width: 3.5,
                 height: 18,
                 decoration: BoxDecoration(
                   color: scheme.primary,
@@ -511,15 +533,36 @@ class _CategoryGroup extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppTheme.spacingSm),
-              Text(
-                category.label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.primary,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.primary,
+                  ),
                 ),
               ),
-              const Spacer(),
+              if (isSubjectGroup)
+                Container(
+                  margin: const EdgeInsets.only(right: AppTheme.spacingXs),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    category.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
               Text(
                 '${items.length} 项',
                 style: TextStyle(
