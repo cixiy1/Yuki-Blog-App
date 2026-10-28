@@ -219,6 +219,72 @@ void main() {
     expect(find.text('英语课文朗读'), findsOneWidget);
     expect(find.text('写个人介绍'), findsOneWidget);
   });
+
+  test('TodoItem 序列化往返保留 startDate/subject/group', () {
+    final item = TodoItem(
+      id: 'a1',
+      title: '社团招新',
+      subject: '宣传物料',
+      group: '社团活动',
+      startDate: DateTime(2026, 10, 28),
+      dueDate: DateTime(2026, 11, 1),
+    );
+    final back = TodoItem.fromJson(item.toJson());
+    expect(back.startDate, DateTime(2026, 10, 28));
+    expect(back.dueDate, DateTime(2026, 11, 1));
+    expect(back.subject, '宣传物料');
+    expect(back.group, '社团活动');
+    // 自定义分类名作为顶层分组标签
+    expect(back.groupLabel, '社团活动');
+  });
+
+  testWidgets('新建待办可设定细分分类与自定义分类', (tester) async {
+    await pumpTodo(tester);
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    // 标题 / 备注 / 细分分类 三个输入框
+    await tester.enterText(find.byType(TextFormField).at(0), '做竞赛 PPT');
+    await tester.enterText(find.byType(TextFormField).at(2), '竞赛准备');
+    // 选「自定义」分类并输入名称
+    await tester.tap(find.text('自定义'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).at(3), '学科竞赛');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pumpAndSettle();
+
+    // 自定义分类名成为顶层组名，细分分类成为子区块标题
+    expect(find.text('学科竞赛'), findsOneWidget);
+    expect(find.text('竞赛准备'), findsOneWidget);
+    expect(find.text('做竞赛 PPT'), findsOneWidget);
+  });
+
+  testWidgets('编辑待办可修改细分分类并保留分组', (tester) async {
+    final r = FakeRemote([
+      RemoteTodo(
+        id: 'e1',
+        title: '英语课文朗读',
+        category: TodoCategory.classAffairs,
+        group: '软件2615同学待办',
+        subject: '英语作业',
+      ),
+    ]);
+    await pumpTodo(tester, remote: r);
+
+    // 打开编辑对话框，细分分类输入框已预填原科目
+    await tester.tap(find.text('英语课文朗读'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField).at(2), findsOneWidget);
+
+    // 只改标题保存；分组与细分分类不应丢
+    await tester.enterText(find.byType(TextFormField).at(0), '英语课文跟读');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('英语课文跟读'), findsOneWidget);
+    expect(find.text('软件2615同学待办'), findsOneWidget);
+    expect(find.text('英语作业'), findsOneWidget);
+  });
 }
 
 /// 默认空远端，避免测试中真的去联网。

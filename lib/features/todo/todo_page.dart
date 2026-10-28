@@ -830,29 +830,64 @@ class _TodoTile extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (dueText != null) ...[
+                  if (item.startDate != null ||
+                      item.dueText(done: item.done) != null) ...[
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: dueOverdue
-                            ? scheme.errorContainer
-                            : scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        dueText,
-                        style: TextStyle(
-                          fontSize: 11,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (item.startDate != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.play_arrow,
+                                    size: 12,
+                                    color: scheme.onSecondaryContainer),
+                                const SizedBox(width: 2),
+                                Text(
+                                  formatStartLabel(item.startDate!),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSecondaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (item.dueText(done: item.done) != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: dueOverdue
+                                  ? scheme.errorContainer
+                                  : scheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              item.dueText(done: item.done)!,
+                              style: TextStyle(
+                                fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: dueOverdue
                               ? scheme.onErrorContainer
                               : scheme.onPrimaryContainer,
                         ),
                       ),
+                    ),
+                      ],
                     ),
                   ],
                 ],
@@ -908,7 +943,11 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtl = TextEditingController();
   final _noteCtl = TextEditingController();
+  final _subjectCtl = TextEditingController();
+  final _customCatCtl = TextEditingController();
   late TodoCategory _category;
+  bool _useCustomCategory = false;
+  DateTime? _startDate;
   DateTime? _dueDate;
 
   @override
@@ -916,7 +955,12 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
     super.initState();
     _titleCtl.text = widget.initial?.title ?? '';
     _noteCtl.text = widget.initial?.note ?? '';
+    _subjectCtl.text = widget.initial?.subject ?? '';
     _category = widget.initial?.category ?? TodoCategory.other;
+    // 已有分组信息（远端组名或此前自定义的分类名）原样带入，可改可清。
+    _customCatCtl.text = widget.initial?.group ?? '';
+    _useCustomCategory = widget.initial?.group != null;
+    _startDate = widget.initial?.startDate;
     _dueDate = widget.initial?.dueDate;
   }
 
@@ -924,29 +968,43 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
   void dispose() {
     _titleCtl.dispose();
     _noteCtl.dispose();
+    _subjectCtl.dispose();
+    _customCatCtl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDue() async {
+  Future<void> _pickDate({required bool isStart}) async {
+    final current = isStart ? _startDate : _dueDate;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _dueDate ?? DateTime.now(),
+      initialDate: current ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => _dueDate = picked);
+    if (picked == null) return;
+    setState(() => isStart ? _startDate = picked : _dueDate = picked);
   }
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
     final initial = widget.initial;
+    final subject = _subjectCtl.text.trim();
+    final customGroup = _useCustomCategory ? _customCatCtl.text.trim() : '';
     final item = TodoItem(
       id: initial?.id ?? _generateId(),
       title: _titleCtl.text.trim(),
       note: _noteCtl.text.trim().isEmpty ? null : _noteCtl.text.trim(),
+      // 细分分类（科目）随表单设定；留空则清掉。
+      subject: subject.isEmpty ? null : subject,
+      // 自定义分类名作为顶层分组；未启用自定义时保留原有分组
+      // （编辑远端项不丢组），从无到有只能经自定义输入。
+      group: customGroup.isNotEmpty
+          ? customGroup
+          : (!_useCustomCategory ? initial?.group : null),
       category: _category,
       done: initial?.done ?? false,
       createdAt: initial?.createdAt,
+      startDate: _startDate,
       dueDate: _dueDate,
       // 远端项被编辑时转为本地自建，避免下次拉取被远端覆盖。
       source: initial?.source == TodoSource.remote
@@ -961,7 +1019,6 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isEdit = widget.initial != null;
     return AlertDialog(
       title: Text(isEdit ? '编辑待办' : '新建待办'),
@@ -985,6 +1042,14 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
                 decoration: const InputDecoration(labelText: '备注（可选）'),
                 maxLines: 2,
               ),
+              const SizedBox(height: AppTheme.spacingSm),
+              TextFormField(
+                controller: _subjectCtl,
+                decoration: const InputDecoration(
+                  labelText: '细分分类（可选）',
+                  hintText: '如：英语作业 / Java程序设计',
+                ),
+              ),
               const SizedBox(height: AppTheme.spacingMd),
               Text('分类',
                   style: Theme.of(context).textTheme.labelMedium),
@@ -994,32 +1059,55 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
                 children: [
                   for (final c in TodoCategory.valuesOrdered)
                     ChoiceChip(
-                      selected: _category == c,
+                      selected: !_useCustomCategory && _category == c,
                       label: Text(c.label),
                       avatar: Icon(c.icon, size: 16),
-                      onSelected: (_) => setState(() => _category = c),
+                      onSelected: (_) => setState(() {
+                        _category = c;
+                        _useCustomCategory = false;
+                      }),
                     ),
+                  ChoiceChip(
+                    selected: _useCustomCategory,
+                    label: const Text('自定义'),
+                    avatar: const Icon(Icons.edit_outlined, size: 16),
+                    onSelected: (_) =>
+                        setState(() => _useCustomCategory = true),
+                  ),
                 ],
               ),
-              const SizedBox(height: AppTheme.spacingMd),
-              Row(
-                children: [
-                  Icon(Icons.event_outlined,
-                      size: 18, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: AppTheme.spacingXs),
-                  TextButton(
-                    onPressed: _pickDue,
-                    child: Text(_dueDate == null
-                        ? '添加截止日期'
-                        : '${_dueDate!.month}月${_dueDate!.day}日'),
+              if (_useCustomCategory) ...[
+                const SizedBox(height: AppTheme.spacingXs),
+                TextFormField(
+                  controller: _customCatCtl,
+                  decoration: const InputDecoration(
+                    labelText: '自定义分类名',
+                    hintText: '如：社团活动 / 竞赛准备',
                   ),
-                  if (_dueDate != null)
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => setState(() => _dueDate = null),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
+                ),
+              ],
+              const SizedBox(height: AppTheme.spacingMd),
+              _DatePickRow(
+                icon: Icons.play_circle_outline,
+                label: _startDate == null
+                    ? '添加开始日期'
+                    : formatStartLabel(_startDate!),
+                hasValue: _startDate != null,
+                onPick: () => _pickDate(isStart: true),
+                onClear: _startDate == null
+                    ? null
+                    : () => setState(() => _startDate = null),
+              ),
+              _DatePickRow(
+                icon: Icons.event_outlined,
+                label: _dueDate == null
+                    ? '添加截止日期'
+                    : formatDueLabel(_dueDate!),
+                hasValue: _dueDate != null,
+                onPick: () => _pickDate(isStart: false),
+                onClear: _dueDate == null
+                    ? null
+                    : () => setState(() => _dueDate = null),
               ),
             ],
           ),
@@ -1034,6 +1122,45 @@ class _TodoEditorDialogState extends State<_TodoEditorDialog> {
           onPressed: _submit,
           child: Text(isEdit ? '保存' : '添加'),
         ),
+      ],
+    );
+  }
+}
+
+/// 编辑器里的日期行：图标 + 按钮（选日期），有值时附带清除按钮。
+class _DatePickRow extends StatelessWidget {
+  const _DatePickRow({
+    required this.icon,
+    required this.label,
+    required this.hasValue,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool hasValue;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: scheme.onSurfaceVariant),
+        const SizedBox(width: AppTheme.spacingXs),
+        TextButton(
+          onPressed: onPick,
+          child: Text(label),
+        ),
+        if (hasValue)
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: onClear,
+            tooltip: '清除',
+            visualDensity: VisualDensity.compact,
+          ),
       ],
     );
   }

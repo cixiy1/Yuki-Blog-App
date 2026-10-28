@@ -34,6 +34,7 @@ class TodoItem {
     this.category = TodoCategory.other,
     this.done = false,
     DateTime? createdAt,
+    this.startDate,
     this.dueDate,
     this.dueLabel,
     this.source = TodoSource.local,
@@ -67,6 +68,9 @@ class TodoItem {
   final bool done;
   final DateTime createdAt;
 
+  /// 本地设定的开始日期（新建/编辑时选日期）。
+  final DateTime? startDate;
+
   /// 本地设定的绝对截止日（新建/编辑时选日期）。
   final DateTime? dueDate;
 
@@ -89,6 +93,8 @@ class TodoItem {
     bool? done,
     DateTime? dueDate,
     bool clearDue = false,
+    DateTime? startDate,
+    bool clearStart = false,
     String? dueLabel,
     TodoSource? source,
     String? remoteId,
@@ -103,6 +109,7 @@ class TodoItem {
         done: done ?? this.done,
         createdAt: createdAt,
         dueDate: clearDue ? null : (dueDate ?? this.dueDate),
+        startDate: clearStart ? null : (startDate ?? this.startDate),
         dueLabel: dueLabel ?? this.dueLabel,
         source: source ?? this.source,
         remoteId: remoteId ?? this.remoteId,
@@ -124,6 +131,7 @@ class TodoItem {
         'category': category.name,
         'done': done,
         'createdAt': createdAt.toIso8601String(),
+        'startDate': startDate?.toIso8601String(),
         'dueDate': dueDate?.toIso8601String(),
         'dueLabel': dueLabel,
         'source': source.name,
@@ -142,6 +150,7 @@ class TodoItem {
       orElse: () => TodoSource.local,
     );
     final createdRaw = json['createdAt'] as String?;
+    final startRaw = json['startDate'] as String?;
     final dueRaw = json['dueDate'] as String?;
     return TodoItem(
       id: json['id'] as String,
@@ -152,6 +161,7 @@ class TodoItem {
       category: category,
       done: json['done'] as bool? ?? false,
       createdAt: createdRaw == null ? null : DateTime.tryParse(createdRaw),
+      startDate: startRaw == null ? null : DateTime.tryParse(startRaw),
       dueDate: dueRaw == null ? null : DateTime.tryParse(dueRaw),
       dueLabel: json['dueLabel'] as String?,
       source: source,
@@ -169,4 +179,15 @@ String formatDueLabel(DateTime due, {bool done = false}) {
   if (diff < 0) return '逾期 ${-diff} 天';
   if (diff == 0) return '今天截止';
   return '${due.month}月${due.day}日截止';
+}
+
+/// 开始日的展示文案：今天 / 明天 / N月N日。
+String formatStartLabel(DateTime start) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final startDay = DateTime(start.year, start.month, start.day);
+  final diff = startDay.difference(today).inDays;
+  if (diff == 0) return '今天开始';
+  if (diff == 1) return '明天开始';
+  return '${start.month}月${start.day}日开始';
 }
