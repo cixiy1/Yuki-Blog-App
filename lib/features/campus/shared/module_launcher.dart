@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/campus/campus_services.dart';
 import '../lostfound/lost_found_list_page.dart';
+import '../market/market_list_page.dart';
 
 /// 六大模块。
 enum CampusModule {
@@ -40,6 +41,11 @@ Future<void> openCampusModule(
         ),
       );
     case CampusModule.market:
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => MarketListPage(services: subject),
+        ),
+      );
     case CampusModule.express:
     case CampusModule.activity:
     case CampusModule.form:

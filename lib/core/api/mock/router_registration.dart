@@ -1,5 +1,6 @@
 import 'handlers/auth_handlers.dart';
 import 'handlers/lost_found_handlers.dart';
+import 'handlers/market_handlers.dart';
 import 'handlers/media_handlers.dart';
 import 'handlers/message_handlers.dart';
 import 'handlers/portal_handlers.dart';
@@ -14,5 +15,6 @@ MockRouter buildMockRouter() {
   registerPortalHandlers(router);
   registerMessageHandlers(router);
   registerLostFoundHandlers(router);
+  registerMarketHandlers(router);
   return router;
 }

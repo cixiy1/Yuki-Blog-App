@@ -6,7 +6,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/campus/campus_services.dart';
 import '../../../models/campus/lost_found_post.dart';
 import '../shared/campus_format.dart';
-import '../shared/campus_image.dart';
+import '../shared/campus_gallery.dart';
 import '../shared/campus_sub_page.dart';
 import '../shared/status_chip.dart';
 import 'lost_found_editor_page.dart';
@@ -33,7 +33,6 @@ class _LostFoundDetailPageState extends State<LostFoundDetailPage> {
   late LostFoundPost _post = widget.post;
   bool _busy = false;
   bool _changed = false;
-  int _page = 0;
 
   bool get _canEdit => _post.isMine && _post.isOpen;
 
@@ -135,41 +134,6 @@ class _LostFoundDetailPageState extends State<LostFoundDetailPage> {
     _toast('联系方式已复制');
   }
 
-  void _openViewer(int index) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            PageView.builder(
-              controller: PageController(initialPage: index),
-              itemCount: _post.imageIds.length,
-              itemBuilder: (_, i) => InteractiveViewer(
-                child: Center(
-                  child: CampusImage(
-                    imageId: _post.imageIds[i],
-                    media: widget.services.media,
-                    fit: BoxFit.contain,
-                    borderRadius: 0,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: MediaQuery.paddingOf(dialogContext).top + 8,
-              right: 8,
-              child: IconButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // 返回键与手势都要带上「有没有改过」，所以拦截一次 pop 再自己回传结果。
@@ -250,7 +214,11 @@ class _LostFoundDetailPageState extends State<LostFoundDetailPage> {
         bottom: AppTheme.spacingXl,
       ),
       children: [
-        if (_post.imageIds.isNotEmpty) _gallery(),
+        if (_post.imageIds.isNotEmpty)
+          CampusGallery(
+            imageIds: _post.imageIds,
+            media: widget.services.media,
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             AppTheme.spacingMd,
@@ -318,53 +286,6 @@ class _LostFoundDetailPageState extends State<LostFoundDetailPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _gallery() {
-    final ids = _post.imageIds;
-    return SizedBox(
-      height: 230,
-      child: Stack(
-        children: [
-          PageView.builder(
-            itemCount: ids.length,
-            onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (context, i) => GestureDetector(
-              onTap: () => _openViewer(i),
-              child: CampusImage(
-                imageId: ids[i],
-                media: widget.services.media,
-                fit: BoxFit.cover,
-                borderRadius: 0,
-              ),
-            ),
-          ),
-          if (ids.length > 1)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: AppTheme.spacingSm,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < ids.length; i++)
-                    Container(
-                      width: i == _page ? 16 : 6,
-                      height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(
-                          alpha: i == _page ? 0.95 : 0.5,
-                        ),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
     );
   }
 
