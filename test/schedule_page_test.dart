@@ -15,6 +15,13 @@ import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
+/// 「回到本周」现在是常驻占位（隐藏时保布局高度），断言改为
+  /// 检查按钮是否可点（本周 = 隐藏且禁用）。
+  Finder backToToday() => find.ancestor(
+    of: find.text('回到本周'),
+    matching: find.byType(TextButton),
+  );
+
 void main() {
   final data = TimetableData.fromRawJson(
       File('assets/data/schedule-2615.json').readAsStringSync());
@@ -85,8 +92,9 @@ void main() {
       viewSchedule.days.contains(today.weekday) ? findsOneWidget : findsNothing,
     );
 
-    // 已在本周时不显示「回到本周」
-    expect(find.text('回到本周'), findsNothing);
+    // 已在本周时「回到本周」隐藏且禁用（常驻占位，不闪布局）。
+    expect(find.text('回到本周'), findsOneWidget);
+    expect(tester.widget<TextButton>(backToToday()).onPressed, isNull);
 
     // 有课程格子
     expect(find.byType(CourseCell), findsWidgets);
@@ -226,18 +234,20 @@ void main() {
     );
   });
 
+
+
   testWidgets('下一周后出现「回到本周」，且可跳回', (tester) async {
     await pumpTall(tester, wrapApp());
 
     await tester.tap(find.byTooltip('下一周'));
     await tester.pumpAndSettle();
     expect(find.text('第 ${realWeek + 1} 周'), findsOneWidget);
-    expect(find.text('回到本周'), findsOneWidget);
+    expect(tester.widget<TextButton>(backToToday()).onPressed, isNotNull);
 
     await tester.tap(find.text('回到本周'));
     await tester.pumpAndSettle();
     expect(find.text('第 $realWeek 周'), findsOneWidget);
-    expect(find.text('回到本周'), findsNothing);
+    expect(tester.widget<TextButton>(backToToday()).onPressed, isNull);
   });
 
   testWidgets('网格左右滑动切换周次，周条文案联动', (tester) async {
@@ -251,7 +261,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('第 ${realWeek + 1} 周'), findsOneWidget);
-    expect(find.text('回到本周'), findsOneWidget);
+    expect(tester.widget<TextButton>(backToToday()).onPressed, isNotNull);
 
     // 往右滑 = 上一周，滑回本周。
     await tester.fling(
@@ -261,7 +271,48 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('第 $realWeek 周'), findsOneWidget);
-    expect(find.text('回到本周'), findsNothing);
+    expect(tester.widget<TextButton>(backToToday()).onPressed, isNull);
+  });
+
+  testWidgets('跟手翻周：拖拽中相邻周网格同屏，拖一半松手弹回', (tester) async {
+    await pumpTall(tester, wrapApp());
+
+    final gesture = await tester.startGesture(tester.getCenter(
+      find.byType(TimetableGrid),
+    ));
+    // 拖出一半：本周网格跟着位移，下一周网格从右侧露出。
+    // 三小步累计跨过拖拽斜距（判胜帧只触发 start），最后一步才有 update。
+    await gesture.moveBy(const Offset(-8, 0));
+    await gesture.moveBy(const Offset(-8, 0));
+    await gesture.moveBy(const Offset(-8, 0));
+    await gesture.moveBy(const Offset(-96, 0));
+    await tester.pump(); // 只推进一帧，不结算吸附
+    expect(
+      find.byType(TimetableGrid),
+      findsNWidgets(2),
+      reason: '拖拽中应同时渲染本周与相邻周两张网格',
+    );
+    expect(find.text('第 $realWeek 周'), findsOneWidget,
+        reason: '未松手前周次不变');
+
+    // 拖一半就松手（位移 < 40% 且无速度）：弹回原周。
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byType(TimetableGrid), findsOneWidget);
+    expect(find.text('第 $realWeek 周'), findsOneWidget,
+        reason: '拖一半松手应弹回，不翻周');
+
+    // 拖过阈值再松手：翻到下一周。
+    final g2 = await tester.startGesture(tester.getCenter(
+      find.byType(TimetableGrid),
+    ));
+    await g2.moveBy(const Offset(-8, 0));
+    await g2.moveBy(const Offset(-8, 0));
+    await g2.moveBy(const Offset(-8, 0));
+    await g2.moveBy(const Offset(-236, 0));
+    await g2.up();
+    await tester.pumpAndSettle();
+    expect(find.text('第 ${realWeek + 1} 周'), findsOneWidget);
   });
 
   testWidgets('周次选择弹层：跳到第 5 周显示无课横幅', (tester) async {

@@ -215,15 +215,22 @@ class WeekBar extends StatelessWidget {
             ),
           ],
         ),
-        if (!isCurrent)
-          Align(
+        // 「回到本周」常驻占位（网页 .tt-now is-hidden 的 visibility 策略）：
+        // 在本周时只隐藏不撤行，翻周瞬间布局不跳动。
+        Visibility(
+          visible: !isCurrent,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: onToday,
+              onPressed: isCurrent ? null : onToday,
               icon: const Icon(Icons.today, size: 16),
               label: const Text('回到本周'),
             ),
           ),
+        ),
       ],
     );
   }

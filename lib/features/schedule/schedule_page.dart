@@ -96,16 +96,41 @@ class _ScheduleBody extends StatefulWidget {
   State<_ScheduleBody> createState() => _ScheduleBodyState();
 }
 
-class _ScheduleBodyState extends State<_ScheduleBody> {
+class _ScheduleBodyState extends State<_ScheduleBody>
+    with TickerProviderStateMixin {
   late TimetableResolver _resolver;
   late int _realWeek;
   late int _viewWeek;
 
-  /// 最近一次翻周的方向：+1 往后翻（新内容从右侧滑入），-1 往前翻。
-  /// 驱动网格的滑动过渡动画方向。
-  int _slideDir = 1;
-
   String? _selectedKey;
+
+  /// 周次解析缓存：跟手翻周时每一帧都要同时取本周与相邻周的数据，
+  /// resolve 是纯计算但不便宜，按周 memo（换数据源时整体清空）。
+  final Map<int, WeekSchedule> _scheduleCache = {};
+
+  // —— 跟手翻周（PageView 式：内容跟手指位移，松手按速度/位移吸附）——
+
+  /// 松手后的吸附动画：把 [_dragDx] 从松手值动画到 ±页宽（翻周）或 0（弹回）。
+  late final AnimationController _settle = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+  );
+
+  /// 当前水平位移（px）：左滑为负（露出下一周），右滑为正（露出上一周）。
+  double _dragDx = 0;
+
+  /// 拖拽/吸附过程中露出的相邻周；null = 没有相邻页（边界周或未拖动）。
+  int? _neighborWeek;
+
+  /// 吸附动画的位移插值（begin = 松手时位移，end = ±页宽或 0）。
+  Tween<double>? _settleTween;
+
+  /// 吸附结束时是否翻到 [_pendingTargetWeek]。
+  bool _pendingCommit = false;
+  int? _pendingTargetWeek;
+
+  /// 网格区宽度（拖拽位移换算进度用），由网格的 LayoutBuilder 回填。
+  double _pagerWidth = 0;
 
   @override
   void initState() {
@@ -113,6 +138,29 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
     _resolver = TimetableResolver(widget.data);
     _realWeek = _resolver.currentWeek();
     _viewWeek = _realWeek;
+    _settle.addListener(_onSettleTick);
+    _settle.addStatusListener(_onSettleStatus);
+  }
+
+  void _onSettleTick() {
+    final tween = _settleTween;
+    if (tween == null) return;
+    setState(() => _dragDx = tween.evaluate(_settle));
+  }
+
+  void _onSettleStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    setState(() {
+      if (_pendingCommit && _pendingTargetWeek != null) {
+        _viewWeek = _pendingTargetWeek!;
+        _selectedKey = null;
+      }
+      _dragDx = 0;
+      _neighborWeek = null;
+      _settleTween = null;
+      _pendingCommit = false;
+      _pendingTargetWeek = null;
+    });
   }
 
   @override
@@ -120,23 +168,67 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.data != widget.data) {
       _resolver = TimetableResolver(widget.data);
+      _scheduleCache.clear();
       _realWeek = _resolver.currentWeek();
       _viewWeek = _realWeek;
       _selectedKey = null;
+      _settle.stop();
+      _dragDx = 0;
+      _neighborWeek = null;
+      _settleTween = null;
+      _pendingCommit = false;
+      _pendingTargetWeek = null;
     }
   }
 
-  /// 切换浏览周次（周条按钮与网格左右滑动共用）。
-  ///
-  /// 越界自动夹紧；换周后选中态清空（那一格在新周里未必存在）。
-  void _setWeek(int week, {required int direction}) {
+  @override
+  void dispose() {
+    _settle
+      ..removeListener(_onSettleTick)
+      ..removeStatusListener(_onSettleStatus)
+      ..dispose();
+    super.dispose();
+  }
+
+  WeekSchedule _scheduleOf(int week) =>
+      _scheduleCache.putIfAbsent(week, () => _resolver.resolve(week));
+
+  /// 今天的星期（1-7）落在 [week] 那一周时返回星期值，否则 -1。
+  int _todayWeekdayOf(int week) {
+    final now = DateTime.now();
+    final todayDate = DateTime(now.year, now.month, now.day);
+    final monday = _resolver.mondayOf(week);
+    final sunday = _resolver.sundayOf(week);
+    return !todayDate.isBefore(monday) && !todayDate.isAfter(sunday)
+        ? now.weekday
+        : -1;
+  }
+
+  /// 周条按钮/周次选择翻周：以滑动动画过渡到目标周（等效一次快速拖拽）。
+  void _animateToWeek(int week) {
     final target = week.clamp(1, widget.data.meta.totalWeeks).toInt();
     if (target == _viewWeek) return;
+    if (_pagerWidth <= 0) {
+      // 布局还没量到宽度（极端时序）：直接切换，不播动画。
+      setState(() {
+        _viewWeek = target;
+        _selectedKey = null;
+      });
+      return;
+    }
+    _settle.stop();
     setState(() {
-      _slideDir = direction;
-      _viewWeek = target;
-      _selectedKey = null;
+      _neighborWeek = target;
+      _pendingCommit = true;
+      _pendingTargetWeek = target;
     });
+    _settleTween = Tween(
+      begin: _dragDx,
+      end: target > _viewWeek ? -_pagerWidth : _pagerWidth,
+    );
+    _settle
+      ..reset()
+      ..forward();
   }
 
   void _selectEntry(ResolvedEntry entry) {
@@ -195,65 +287,121 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           currentWeek: _realWeek,
           weekMonday: monday,
           weekSunday: sunday,
-          onPrev: () => _setWeek(_viewWeek - 1, direction: -1),
-          onNext: () => _setWeek(_viewWeek + 1, direction: 1),
-          onToday: () => _setWeek(_realWeek, direction: _realWeek >= _viewWeek ? 1 : -1),
+          onPrev: () => _animateToWeek(_viewWeek - 1),
+          onNext: () => _animateToWeek(_viewWeek + 1),
+          onToday: () => _animateToWeek(_realWeek),
           onPickWeek: () => showWeekPicker(
             context,
             week: _viewWeek,
             totalWeeks: meta.totalWeeks,
             currentWeek: _realWeek,
             week1Monday: meta.week1Monday,
-            onPick: (w) => _setWeek(w, direction: w >= _viewWeek ? 1 : -1),
+            onPick: _animateToWeek,
           ),
         ),
         const SizedBox(height: AppTheme.spacingMd),
         if (!schedule.hasClass) _NoClassBanner(week: _viewWeek),
-        // 网格左右滑动翻周：手势识别在水平方向，与外层纵向列表不冲突；
-        // 换周时旧网格滑出、新网格从手势方向滑入（_slideDir 决定方向）。
+        // 网格跟手翻周（PageView 式）：拖动时本周网格跟手指位移、相邻周
+        // 网格从旁露出；松手按位移/速度吸附到目标周或弹回。手势在水平
+        // 方向识别，与外层纵向列表不冲突。
         GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (_) => _settle.stop(),
+          onHorizontalDragUpdate: (details) => setState(() {
+            _dragDx += details.delta.dx;
+            final total = widget.data.meta.totalWeeks;
+            if (_dragDx < 0 && _viewWeek < total) {
+              _neighborWeek = _viewWeek + 1;
+            } else if (_dragDx > 0 && _viewWeek > 1) {
+              _neighborWeek = _viewWeek - 1;
+            } else {
+              // 边界周：没有相邻页可露，位移归零（不橡皮筋）。
+              _neighborWeek = null;
+              _dragDx = 0;
+            }
+            _dragDx = _dragDx.clamp(-_pagerWidth, _pagerWidth);
+          }),
           onHorizontalDragEnd: (details) {
+            final w = _pagerWidth;
             final v = details.primaryVelocity ?? 0;
-            if (v < -150) {
-              _setWeek(_viewWeek + 1, direction: 1);
-            } else if (v > 150) {
-              _setWeek(_viewWeek - 1, direction: -1);
+            final dx = _dragDx;
+            // 速度优先，其次位移过半（PageView 的判定策略）。
+            final int? dir;
+            if (v < -600 || (v <= 0 && dx < -w * 0.4)) {
+              dir = 1; // 左滑 → 下一周
+            } else if (v > 600 || (v >= 0 && dx > w * 0.4)) {
+              dir = -1; // 右滑 → 上一周
+            } else {
+              dir = null;
+            }
+            final target = dir == null
+                ? null
+                : (_viewWeek + dir).clamp(1, widget.data.meta.totalWeeks).toInt();
+            if (target == null || target == _viewWeek) {
+              // 弹回：吸附回原位，不翻周。
+              _settleTween = Tween(begin: dx, end: 0);
+              _pendingCommit = false;
+              _pendingTargetWeek = null;
+              _settle
+                ..reset()
+                ..forward();
+            } else {
+              _animateToWeek(target);
             }
           },
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 280),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeIn,
-            // 顶部对齐：过渡中两份网格高度可能不同，别让它们垂直居中跳动。
-            layoutBuilder: (currentChild, previousChildren) => Stack(
-              alignment: Alignment.topCenter,
-              children: [
-                ...previousChildren,
-                ?currentChild,
-              ],
-            ),
-            transitionBuilder: (child, animation) {
-              // 入场从手势方向滑入；离场（动画从 1 回 0）滑向反方向。
-              final dir =
-                  child.key == ValueKey(_viewWeek) ? _slideDir : -_slideDir;
-              return SlideTransition(
-                position: Tween(
-                  begin: Offset(0.16 * dir, 0),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: FadeTransition(opacity: animation, child: child),
-              );
+          onHorizontalDragCancel: () {
+            _settleTween = Tween(begin: _dragDx, end: 0);
+            _pendingCommit = false;
+            _pendingTargetWeek = null;
+            _settle
+              ..reset()
+              ..forward();
+          },
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _pagerWidth = constraints.maxWidth;
+              final w = _pagerWidth;
+              final progress = w > 0 ? _dragDx / w : 0.0;
+                  final neighbor = _neighborWeek;
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 当前周：跟随手指位移（FractionalTranslation 只影响
+                      // 绘制/命中测试，不影响布局——Stack 尺寸仍由它决定）。
+                      FractionalTranslation(
+                        translation: Offset(progress, 0),
+                        child: TimetableGrid(
+                          schedule: schedule,
+                          weekMonday: monday,
+                          todayWeekday: todayWeekday,
+                          selectedKey: _selectedKey,
+                          onSelectEntry: _selectEntry,
+                        ),
+                      ),
+                      // 相邻周：从拖拽方向一侧露出。只约束左右、顶部对齐，
+                      // 高度放开——fill 会把更高的网格压出 overflow。
+                      if (neighbor != null)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 0,
+                          child: FractionalTranslation(
+                            translation: Offset(
+                              progress < 0 ? progress + 1 : progress - 1,
+                              0,
+                            ),
+                            child: TimetableGrid(
+                              schedule: _scheduleOf(neighbor),
+                              weekMonday: _resolver.mondayOf(neighbor),
+                              todayWeekday: _todayWeekdayOf(neighbor),
+                              selectedKey: null,
+                              onSelectEntry: _selectEntry,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
             },
-            child: KeyedSubtree(
-              key: ValueKey(_viewWeek),
-              child: TimetableGrid(
-                schedule: schedule,
-                weekMonday: monday,
-                todayWeekday: todayWeekday,
-                selectedKey: _selectedKey,
-                onSelectEntry: _selectEntry,
-              ),
-            ),
           ),
         ),
         // 选中课程后，详情紧贴课表网格（在通知之上）：点的哪一格、就接着
