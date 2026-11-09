@@ -25,8 +25,10 @@ const _headerGap = 2.0;
 /// - **所有行等高**：整个表体包一层 [IntrinsicHeight]、每行 [Expanded]——
 ///   flex 的 intrinsic 算法取「最高一行 × 行数」为总高，每行分到的高度
 ///   恰好等于最高行的需求，卡片尺寸全局统一且不截断内容；
-/// - 左侧行标列显示节次号 + 时间段（如 "1-2 / 08:30–10:00"）；
-/// - 今天列在表头高亮（primary 底色胶囊）；
+/// - 左侧行标列显示节次号 + 时间段（如 "1-2 / 08:30–10:00"，宽屏带「节」）；
+/// - 宽屏（≥ [SchedulePalette.wideBreakpoint]）对齐网页版：表头全名
+///   「周一」居中、今天列 primary 着色文字、卡片字号/间距放大；
+/// - 窄屏今天列在表头高亮（primary 底色胶囊）；
 /// - 左右滑动翻周由外层（课程表页）的手势负责，网格只管渲染。
 class TimetableGrid extends StatelessWidget {
   const TimetableGrid({
@@ -55,40 +57,48 @@ class TimetableGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     // 只保留本周有课的列；全周无课时列数为 0（页面会另显示无课横幅）。
     final days = schedule.days;
-
-    return Column(
-      children: [
-        if (days.isNotEmpty) ...[
-          SizedBox(
-            height: _headerHeight,
-            child: _DayHeaderRow(
-              days: days,
-              weekMonday: weekMonday,
-              todayWeekday: todayWeekday,
-            ),
-          ),
-          const SizedBox(height: _headerGap),
-        ],
-        // 表体整体包 IntrinsicHeight：所有行等高（= 最高行的需求高度），
-        // 卡片尺寸全局统一。行内格子不能再出现 flex 子项——IntrinsicHeight
-        // 的 dry layout 高度无界（见 _GridRow 注释）。
-        IntrinsicHeight(
-          child: Column(
-            children: [
-              for (final row in schedule.rows)
-                Expanded(
-                  child: _GridRow(
-                    row: row,
-                    days: days,
-                    selectedKey: selectedKey,
-                    onSelectEntry: onSelectEntry,
-                    entriesAt: schedule.entriesAt,
-                  ),
+    // 宽屏对齐网页版：表头全名「周一」、今天着色文字、行标带「节」。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide =
+            constraints.maxWidth >= SchedulePalette.wideBreakpoint;
+        return Column(
+          children: [
+            if (days.isNotEmpty) ...[
+              SizedBox(
+                height: _headerHeight,
+                child: _DayHeaderRow(
+                  days: days,
+                  weekMonday: weekMonday,
+                  todayWeekday: todayWeekday,
+                  wide: wide,
                 ),
+              ),
+              const SizedBox(height: _headerGap),
             ],
-          ),
-        ),
-      ],
+            // 表体整体包 IntrinsicHeight：所有行等高（= 最高行的需求高度），
+            // 卡片尺寸全局统一。行内格子不能再出现 flex 子项——IntrinsicHeight
+            // 的 dry layout 高度无界（见 _GridRow 注释）。
+            IntrinsicHeight(
+              child: Column(
+                children: [
+                  for (final row in schedule.rows)
+                    Expanded(
+                      child: _GridRow(
+                        row: row,
+                        days: days,
+                        wide: wide,
+                        selectedKey: selectedKey,
+                        onSelectEntry: onSelectEntry,
+                        entriesAt: schedule.entriesAt,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -104,6 +114,7 @@ class _GridRow extends StatelessWidget {
   const _GridRow({
     required this.row,
     required this.days,
+    required this.wide,
     required this.selectedKey,
     required this.onSelectEntry,
     required this.entriesAt,
@@ -111,6 +122,7 @@ class _GridRow extends StatelessWidget {
 
   final SlotRow row;
   final List<int> days;
+  final bool wide;
   final String? selectedKey;
   final ValueChanged<ResolvedEntry> onSelectEntry;
   final List<ResolvedEntry> Function(int day, String rowKey) entriesAt;
@@ -120,7 +132,7 @@ class _GridRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SlotLabelCell(row: row),
+        SlotLabelCell(row: row, wide: wide),
         for (final day in days) _dayCell(day),
       ],
     );
@@ -140,6 +152,7 @@ class _GridRow extends StatelessWidget {
         child: CourseCell(
           key: ValueKey(entry.key),
           entry: entry,
+          wide: wide,
           isSelected: entry.key == selectedKey,
           onTap: () => onSelectEntry(entry),
         ),
@@ -154,6 +167,7 @@ class _GridRow extends StatelessWidget {
             CourseCell(
               key: ValueKey(entry.key),
               entry: entry,
+              wide: wide,
               isSelected: entry.key == selectedKey,
               onTap: () => onSelectEntry(entry),
             ),
@@ -163,25 +177,28 @@ class _GridRow extends StatelessWidget {
   }
 }
 
-/// 表头行：每列两行——短星期名（"一"）+ 日期（"11/9"）。
-/// 今天列用 primary 底色胶囊高亮。只渲染有课的列。
+/// 表头行：窄屏两行短星期名（"一"）+ 日期（"11/9"），今天列 primary 胶囊；
+/// 宽屏对齐网页版：全名（"周一"）+ 日期居中，今天列用 primary 着色文字
+/// （网页 .tt-dh.is-today，无底色）。
 class _DayHeaderRow extends StatelessWidget {
   const _DayHeaderRow({
     required this.days,
     required this.weekMonday,
     required this.todayWeekday,
+    required this.wide,
   });
 
   final List<int> days;
   final DateTime weekMonday;
   final int todayWeekday;
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        const SizedBox(width: SchedulePalette.labelWidth),
+        SizedBox(width: wide ? SchedulePalette.labelWidthWide : SchedulePalette.labelWidth),
         for (final day in days)
           Expanded(
             child: Center(
@@ -189,6 +206,37 @@ class _DayHeaderRow extends StatelessWidget {
                 builder: (context) {
                   final date = weekMonday.add(Duration(days: day - 1));
                   final isToday = day == todayWeekday;
+                  final todayColor = scheme.primary;
+                  if (wide) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _weekdayNames[day],
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.2,
+                            fontWeight:
+                                isToday ? FontWeight.w600 : FontWeight.w500,
+                            color:
+                                isToday ? todayColor : scheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          '${date.month}/${date.day}',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            height: 1.2,
+                            color: isToday
+                                ? todayColor
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
                   return Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,

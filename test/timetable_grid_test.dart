@@ -188,4 +188,32 @@ void main() {
     final widget = tester.widget<CourseCell>(cell);
     expect(picked!.key, widget.entry.key);
   });
+
+  testWidgets('宽屏：表头用全名「周一」且今天列为 primary 着色文字，行标带「节」', (tester) async {
+    // 900 宽 ≥ wideBreakpoint(640)。
+    await pumpGrid(tester, size: const Size(900, 1200));
+
+    // 有课的列用全名，不再出现单字短名。
+    for (final day in schedule.days) {
+      expect(
+        find.text(weekdayLabel(day)),
+        findsOneWidget,
+        reason: '宽屏表头应显示全名「周${weekdayLabel(day)}」',
+      );
+    }
+    expect(find.text('一'), findsNothing, reason: '宽屏不应出现短名');
+
+    // 今天（周一）列着 primary，非今天列不着。
+    final primary = AppTheme.light.colorScheme.primary;
+    final todayText = tester.widget<Text>(find.text('周一'));
+    expect(todayText.style?.color, primary, reason: '今天列全名应为 primary 着色');
+    if (schedule.days.contains(2)) {
+      final tuesday = tester.widget<Text>(find.text('周二'));
+      expect(tuesday.style?.color, isNot(primary));
+    }
+
+    // 行标恢复完整「1-2节」。
+    expect(find.text('1-2节'), findsOneWidget);
+    expect(find.text('1-2'), findsNothing);
+  });
 }
