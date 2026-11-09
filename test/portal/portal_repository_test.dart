@@ -18,11 +18,15 @@ void main() {
         reason: '学生看不到待审核角标');
   });
 
-  test('班委能看到待审核活动数', () async {
-    final services = await testServices(loginAs: '20250102');
-    final summary = await services.portal.summary();
+  test('待审核活动只有管理员看得到', () async {
+    // 班委能发活动但不能自己批，所以这个角标对他是 0。
+    final committee = await testServices(loginAs: '20250102');
+    final forCommittee = await committee.portal.summary();
+    expect(forCommittee.countOf('activityPendingReview'), 0);
 
-    expect(summary.countOf('activityPendingReview'), 1);
+    final admin = await testServices(loginAs: '20250103');
+    final forAdmin = await admin.portal.summary();
+    expect(forAdmin.countOf('activityPendingReview'), 1);
   });
 
   test('三段信息流各不超过 3 条，且未读数与消息表一致', () async {

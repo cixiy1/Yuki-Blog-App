@@ -33,13 +33,16 @@ bool can(UserRole? role, Capability capability) {
   final isManager = role != UserRole.student;
 
   return switch (capability) {
-    Capability.reviewActivity ||
     Capability.createActivity ||
     Capability.createForm ||
     Capability.viewFormSummary ||
     Capability.viewSignupList =>
       isManager,
-    Capability.deleteAnyPost || Capability.resetDemoData => isAdmin,
+    // 审核刻意留给管理员：班委自己发的活动不能自己批。
+    Capability.reviewActivity ||
+    Capability.deleteAnyPost ||
+    Capability.resetDemoData =>
+      isAdmin,
   };
 }
 

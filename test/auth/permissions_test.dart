@@ -16,9 +16,9 @@ void main() {
     }
   });
 
-  test('班委能发活动 / 建表单 / 看汇总，但不能删他人内容', () {
+  test('班委能发活动 / 建表单 / 看汇总，但不能审核、不能删他人内容', () {
     expect(can(UserRole.committeeman, Capability.createActivity), isTrue);
-    expect(can(UserRole.committeeman, Capability.reviewActivity), isTrue);
+    expect(can(UserRole.committeeman, Capability.reviewActivity), isFalse);
     expect(can(UserRole.committeeman, Capability.createForm), isTrue);
     expect(can(UserRole.committeeman, Capability.viewFormSummary), isTrue);
     expect(can(UserRole.committeeman, Capability.viewSignupList), isTrue);

@@ -1,3 +1,4 @@
+import 'handlers/activity_handlers.dart';
 import 'handlers/auth_handlers.dart';
 import 'handlers/express_handlers.dart';
 import 'handlers/lost_found_handlers.dart';
@@ -12,6 +13,7 @@ import 'mock_router.dart';
 /// 每加一个模块，只在这里加一行。
 MockRouter buildMockRouter() {
   final router = MockRouter();
+  registerActivityHandlers(router);
   registerAuthHandlers(router);
   registerMediaHandlers(router);
   registerPortalHandlers(router);

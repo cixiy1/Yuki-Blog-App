@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
 import '../api/campus_db_store.dart';
 import '../api/mock/mock_api_client.dart';
+import 'activity_repository.dart';
 import 'auth_repository.dart';
 import 'express_repository.dart';
 import 'lost_found_repository.dart';
@@ -72,6 +73,7 @@ class CampusServices {
   late final MessageRepository messages = ApiMessageRepository(api);
   late final PortalRepository portal = ApiPortalRepository(api);
   late final LostFoundRepository lostFound = ApiLostFoundRepository(api);
+  late final ActivityRepository activities = ApiActivityRepository(api);
   late final MarketRepository market = ApiMarketRepository(api);
   late final ExpressRepository express = ApiExpressRepository(api);
   late final PurchaseRepository purchases = ApiPurchaseRepository(api);

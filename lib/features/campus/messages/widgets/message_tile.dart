@@ -17,8 +17,10 @@ class MessageTile extends StatelessWidget {
 
   IconData get _icon => switch (message.type) {
         MessageType.activityApproved => Icons.check_circle_outline,
+        MessageType.activityPendingReview => Icons.fact_check_outlined,
         MessageType.activityRejected => Icons.cancel_outlined,
         MessageType.activityPromoted => Icons.upgrade_rounded,
+        MessageType.activityCancelled => Icons.event_busy_outlined,
         MessageType.expressAccepted => Icons.inventory_2_outlined,
         MessageType.expressDelivered => Icons.local_shipping_outlined,
         MessageType.purchaseAccepted => Icons.delivery_dining_outlined,
@@ -28,7 +30,9 @@ class MessageTile extends StatelessWidget {
       };
 
   Color _color(ColorScheme scheme) => switch (message.type) {
-        MessageType.activityRejected => scheme.error,
+        MessageType.activityRejected ||
+        MessageType.activityCancelled =>
+          scheme.error,
         MessageType.creditChanged => scheme.tertiary,
         _ => scheme.primary,
       };

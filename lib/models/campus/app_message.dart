@@ -3,8 +3,10 @@ import 'json_utils.dart';
 /// 消息类型。前端按类型选图标与配色，不做业务分支。
 enum MessageType {
   activityApproved('活动已通过'),
+  activityPendingReview('活动待审核'),
   activityRejected('活动被驳回'),
   activityPromoted('候补递补成功'),
+  activityCancelled('活动已取消'),
   expressAccepted('快递被接单'),
   expressDelivered('快递已送达'),
   purchaseAccepted('代买被接单'),

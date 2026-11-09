@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/campus/campus_services.dart';
+import '../activity/activity_list_page.dart';
 import '../express/express_list_page.dart';
 import '../lostfound/lost_found_list_page.dart';
 import '../market/market_list_page.dart';
@@ -61,6 +62,11 @@ Future<void> openCampusModule(
         ),
       );
     case CampusModule.activity:
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => ActivityListPage(services: subject),
+        ),
+      );
     case CampusModule.form:
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
