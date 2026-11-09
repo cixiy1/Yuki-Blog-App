@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../api/campus_db_store.dart';
 import '../api/mock/mock_api_client.dart';
 import 'auth_repository.dart';
+import 'lost_found_repository.dart';
 import 'media_repository.dart';
 import 'message_repository.dart';
 import 'portal_repository.dart';
@@ -67,6 +68,7 @@ class CampusServices {
   late final MediaRepository media = ApiMediaRepository(api);
   late final MessageRepository messages = ApiMessageRepository(api);
   late final PortalRepository portal = ApiPortalRepository(api);
+  late final LostFoundRepository lostFound = ApiLostFoundRepository(api);
 
   /// 拉一次未读数。失败静默——角标不显示比报错好。
   Future<void> refreshUnread() async {

@@ -15,6 +15,7 @@ class CampusSubPage extends StatelessWidget {
     this.bottomNavigationBar,
     this.floatingActionButton,
     this.resizeToAvoidBottomInset,
+    this.padBodyTop = false,
   });
 
   final String title;
@@ -24,15 +25,33 @@ class CampusSubPage extends StatelessWidget {
   final Widget? floatingActionButton;
   final bool? resizeToAvoidBottomInset;
 
+  /// body 是「固定头 + 滚动列表」这类结构时置 true。
+  ///
+  /// 沉浸标题栏让 body 从屏幕顶端开始铺，滚动视图会自己吃掉
+  /// `MediaQuery.padding.top`，但固定不滚的表头不会——不加这个就钻到
+  /// 标题栏底下去了，看着像被裁掉。
+  final bool padBodyTop;
+
   @override
   Widget build(BuildContext context) {
+    Widget content = body;
+    if (padBodyTop) {
+      content = Builder(
+        // 补偿过的 padding 只在 body 子树里，必须用 body 内的 context 取。
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+          child: body,
+        ),
+      );
+    }
+
     return ImmersiveScaffold(
       title: title,
       actions: actions,
       bottomNavigationBar: bottomNavigationBar,
       floatingActionButton: floatingActionButton,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-      body: SafeArea(top: false, child: body),
+      body: SafeArea(top: false, child: content),
     );
   }
 }

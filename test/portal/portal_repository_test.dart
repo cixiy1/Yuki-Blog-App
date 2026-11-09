@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yuki_blog_app/core/campus/portal_repository.dart';
 
 import '../support/campus_fixtures.dart';
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/campus/campus_services.dart';
+import '../lostfound/lost_found_list_page.dart';
 
 /// 六大模块。
 enum CampusModule {
@@ -22,22 +23,28 @@ enum CampusModule {
 
 /// 点模块卡片时的统一出口。
 ///
-/// 各模块的列表页在后续批次陆续接入，这里先兜住「还没做好」的情况，
+/// 各模块的列表页在后续批次陆续接入，没接的先用 SnackBar 兜住，
 /// 免得点了没反应。
 Future<void> openCampusModule(
   BuildContext context,
   CampusModule module, {
   CampusServices? services,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final subject = services ?? CampusServices.instance;
+
   switch (module) {
     case CampusModule.lostFound:
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => LostFoundListPage(services: subject),
+        ),
+      );
     case CampusModule.market:
     case CampusModule.express:
     case CampusModule.activity:
     case CampusModule.form:
     case CampusModule.purchase:
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${module.label}正在接入'),
           duration: const Duration(seconds: 2),
