@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/campus/campus_services.dart';
 import '../activity/activity_list_page.dart';
 import '../express/express_list_page.dart';
+import '../forms/form_list_page.dart';
 import '../lostfound/lost_found_list_page.dart';
 import '../market/market_list_page.dart';
 import '../purchase/purchase_list_page.dart';
@@ -27,8 +28,7 @@ enum CampusModule {
 
 /// 点模块卡片时的统一出口。
 ///
-/// 各模块的列表页在后续批次陆续接入，没接的先用 SnackBar 兜住，
-/// 免得点了没反应。
+/// 全部走 [Navigator.push]：二级页不进路由表，底栏的选中态就不会被带走。
 Future<void> openCampusModule(
   BuildContext context,
   CampusModule module, {
@@ -68,10 +68,9 @@ Future<void> openCampusModule(
         ),
       );
     case CampusModule.form:
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${module.label}正在接入'),
-          duration: const Duration(seconds: 2),
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => FormListPage(services: subject),
         ),
       );
   }

@@ -147,6 +147,7 @@ class CampusForm {
     this.submissionCount = 0,
     this.targetCount = 0,
     this.mySubmitted = false,
+    this.myAnswers = const {},
     this.isMine = false,
   });
 
@@ -165,6 +166,9 @@ class CampusForm {
   /// 应交人数（本班人数），用于「已收 8/50」。
   final int targetCount;
   final bool mySubmitted;
+
+  /// 自己那份答案（没填过就是空 Map），用于「再改一遍」回填。
+  final Map<String, dynamic> myAnswers;
   final bool isMine;
 
   bool get isOpen => status == FormStatus.open;
@@ -188,6 +192,7 @@ class CampusForm {
         submissionCount: asInt(json['submissionCount']),
         targetCount: asInt(json['targetCount']),
         mySubmitted: asBool(json['mySubmitted']),
+        myAnswers: asMap(json['myAnswers']),
         isMine: asBool(json['isMine']),
       );
 
@@ -205,6 +210,7 @@ class CampusForm {
         'submissionCount': submissionCount,
         'targetCount': targetCount,
         'mySubmitted': mySubmitted,
+        'myAnswers': myAnswers,
         'isMine': isMine,
       };
 }

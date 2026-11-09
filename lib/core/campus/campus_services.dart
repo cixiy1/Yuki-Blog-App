@@ -8,6 +8,7 @@ import '../api/mock/mock_api_client.dart';
 import 'activity_repository.dart';
 import 'auth_repository.dart';
 import 'express_repository.dart';
+import 'form_repository.dart';
 import 'lost_found_repository.dart';
 import 'market_repository.dart';
 import 'media_repository.dart';
@@ -74,6 +75,7 @@ class CampusServices {
   late final PortalRepository portal = ApiPortalRepository(api);
   late final LostFoundRepository lostFound = ApiLostFoundRepository(api);
   late final ActivityRepository activities = ApiActivityRepository(api);
+  late final FormRepository forms = ApiFormRepository(api);
   late final MarketRepository market = ApiMarketRepository(api);
   late final ExpressRepository express = ApiExpressRepository(api);
   late final PurchaseRepository purchases = ApiPurchaseRepository(api);

@@ -105,6 +105,8 @@ Map<String, dynamic> formView(
     ...row,
     'submissionCount': forForm.length,
     'mySubmitted': mine != null,
+    // 只回自己的答案，方便「再改一遍」时回填。
+    'myAnswers': mine?['answers'],
     'isMine': _isMine(row, 'creatorId', uid),
   };
 }

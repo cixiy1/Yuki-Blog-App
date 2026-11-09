@@ -1,6 +1,7 @@
 import 'handlers/activity_handlers.dart';
 import 'handlers/auth_handlers.dart';
 import 'handlers/express_handlers.dart';
+import 'handlers/form_handlers.dart';
 import 'handlers/lost_found_handlers.dart';
 import 'handlers/market_handlers.dart';
 import 'handlers/media_handlers.dart';
@@ -21,6 +22,7 @@ MockRouter buildMockRouter() {
   registerLostFoundHandlers(router);
   registerMarketHandlers(router);
   registerExpressHandlers(router);
+  registerFormHandlers(router);
   registerPurchaseHandlers(router);
   return router;
 }
