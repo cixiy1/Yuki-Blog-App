@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:yuki_blog_app/core/campus/campus_services.dart';
 import 'package:yuki_blog_app/core/update_service.dart';
 import 'package:yuki_blog_app/features/update/update_dialog.dart';
 
 /// 设置页：应用信息与常规操作。
 class SettingPage extends StatefulWidget {
-  const SettingPage({super.key});
+  const SettingPage({super.key, this.services});
+
+  /// 校园服务门面；为 null 时用全局实例（测试可注入假实现）。
+  final CampusServices? services;
 
   @override
   State<SettingPage> createState() => _SettingPageState();
