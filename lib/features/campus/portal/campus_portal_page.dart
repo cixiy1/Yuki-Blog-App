@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/routes/route_paths.dart';
 import '../../../app/theme.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/campus/campus_services.dart';
@@ -7,6 +9,9 @@ import '../../../core/campus/portal_repository.dart';
 import '../../../models/campus/express_task.dart';
 import '../../../models/campus/lost_found_post.dart';
 import '../../../models/campus/market_item.dart';
+import '../express/express_detail_page.dart';
+import '../lostfound/lost_found_detail_page.dart';
+import '../market/market_detail_page.dart';
 import '../messages/message_center_page.dart';
 import '../shared/campus_format.dart';
 import '../shared/empty_state.dart';
@@ -87,6 +92,15 @@ class _CampusPortalPageState extends State<CampusPortalPage> {
     if (mounted) await _load();
   }
 
+  /// 从信息流直接进详情：看完可能改了状态（标记已找到 / 已售出），
+  /// 回来重拉一次概览。
+  Future<void> _openDetail(Widget page) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => page),
+    );
+    if (mounted) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _services.session.user;
@@ -110,6 +124,8 @@ class _CampusPortalPageState extends State<CampusPortalPage> {
               user: user,
               unread: _services.unread.value,
               onTapMessages: _openMessages,
+              // 个人信息与信用分都在设置页，点头像直接过去。
+              onTapProfile: () => context.go(RoutePaths.setting),
             ),
           if (_error != null) ...[
             const SizedBox(height: AppTheme.spacingMd),
@@ -123,7 +139,12 @@ class _CampusPortalPageState extends State<CampusPortalPage> {
             emptyText: '还没有人发失物招领',
             emptyIcon: Icons.search_off_rounded,
             onViewAll: () => _openModule(CampusModule.lostFound),
-            itemBuilder: (context, post) => _LostFoundRow(post: post),
+            itemBuilder: (context, post) => _LostFoundRow(
+              post: post,
+              onTap: () => _openDetail(
+                LostFoundDetailPage(services: _services, post: post),
+              ),
+            ),
           ),
           FeedPreviewSection<MarketItem>(
             title: '最新二手',
@@ -131,7 +152,12 @@ class _CampusPortalPageState extends State<CampusPortalPage> {
             emptyText: '还没有人在出售闲置',
             emptyIcon: Icons.local_offer_outlined,
             onViewAll: () => _openModule(CampusModule.market),
-            itemBuilder: (context, item) => _MarketRow(item: item),
+            itemBuilder: (context, item) => _MarketRow(
+              item: item,
+              onTap: () => _openDetail(
+                MarketDetailPage(services: _services, item: item),
+              ),
+            ),
           ),
           FeedPreviewSection<ExpressTask>(
             title: '待接快递',
@@ -139,7 +165,12 @@ class _CampusPortalPageState extends State<CampusPortalPage> {
             emptyText: '暂时没有待接的快递',
             emptyIcon: Icons.inventory_2_outlined,
             onViewAll: () => _openModule(CampusModule.express),
-            itemBuilder: (context, task) => _ExpressRow(task: task),
+            itemBuilder: (context, task) => _ExpressRow(
+              task: task,
+              onTap: () => _openDetail(
+                ExpressDetailPage(services: _services, task: task),
+              ),
+            ),
           ),
           if (_summary.latestLostFound.isEmpty &&
               _summary.latestMarket.isEmpty &&
@@ -156,10 +187,38 @@ class _CampusPortalPageState extends State<CampusPortalPage> {
   }
 }
 
+/// 门户信息流的一行：整行可点，点进对应详情。
+///
+/// 外层容器自己画了底色，水波纹得挂在透明 Material 上才看得见。
+class _FeedRow extends StatelessWidget {
+  const _FeedRow({required this.onTap, required this.children});
+
+  final VoidCallback onTap;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.spacingMd,
+            vertical: 10,
+          ),
+          child: Row(children: children),
+        ),
+      ),
+    );
+  }
+}
+
 class _LostFoundRow extends StatelessWidget {
-  const _LostFoundRow({required this.post});
+  const _LostFoundRow({required this.post, required this.onTap});
 
   final LostFoundPost post;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -167,140 +226,127 @@ class _LostFoundRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final isLost = post.type == LostFoundType.lost;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: 10,
-      ),
-      child: Row(
-        children: [
-          StatusChip(
-            label: post.type.label,
-            color: isLost ? scheme.error : scheme.primary,
+    return _FeedRow(
+      onTap: onTap,
+      children: [
+        StatusChip(
+          label: post.type.label,
+          color: isLost ? scheme.error : scheme.primary,
+        ),
+        const SizedBox(width: AppTheme.spacingSm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                post.title,
+                style: theme.textTheme.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '${post.location} · ${formatRelative(post.createdAt)}',
+                style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-          const SizedBox(width: AppTheme.spacingSm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  post.title,
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  '${post.location} · ${formatRelative(post.createdAt)}',
-                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _MarketRow extends StatelessWidget {
-  const _MarketRow({required this.item});
+  const _MarketRow({required this.item, required this.onTap});
 
   final MarketItem item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: 10,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  '${item.condition.label} · ${formatRelative(item.createdAt)}',
-                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
-                ),
-              ],
-            ),
+    return _FeedRow(
+      onTap: onTap,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.title,
+                style: theme.textTheme.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '${item.condition.label} · ${formatRelative(item.createdAt)}',
+                style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+              ),
+            ],
           ),
-          const SizedBox(width: AppTheme.spacingSm),
-          Text(
-            formatMoney(item.priceCents),
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: scheme.error,
-            ),
+        ),
+        const SizedBox(width: AppTheme.spacingSm),
+        Text(
+          formatMoney(item.priceCents),
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: scheme.error,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _ExpressRow extends StatelessWidget {
-  const _ExpressRow({required this.task});
+  const _ExpressRow({required this.task, required this.onTap});
 
   final ExpressTask task;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: 10,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${task.station} → ${task.deliverTo}',
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  '${formatDeadline(task.deadline)} · ${task.creatorName}',
-                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
-                ),
-              ],
-            ),
+    return _FeedRow(
+      onTap: onTap,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${task.station} → ${task.deliverTo}',
+                style: theme.textTheme.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '${formatDeadline(task.deadline)} · ${task.creatorName}',
+                style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+              ),
+            ],
           ),
-          const SizedBox(width: AppTheme.spacingSm),
-          Text(
-            formatMoney(task.rewardCents),
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: scheme.error,
-            ),
+        ),
+        const SizedBox(width: AppTheme.spacingSm),
+        Text(
+          formatMoney(task.rewardCents),
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: scheme.error,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
