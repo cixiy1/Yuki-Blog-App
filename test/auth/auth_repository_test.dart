@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuki_blog_app/core/api/api_client.dart';
-import 'package:yuki_blog_app/core/api/api_paths.dart';
 import 'package:yuki_blog_app/core/campus/auth_repository.dart';
 
 import '../support/mock_fixtures.dart';

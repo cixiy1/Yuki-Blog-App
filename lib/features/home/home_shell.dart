@@ -9,12 +9,20 @@ import 'package:yuki_blog_app/features/update/update_dialog.dart';
 import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.child, this.services});
+  const HomeShell({
+    super.key,
+    required this.child,
+    this.services,
+    this.checkUpdates = true,
+  });
 
   final Widget child;
 
   /// 校园服务门面；为 null 时用全局实例。
   final CampusServices? services;
+
+  /// 是否在启动时静默检查更新。测试里关掉，免得真的发网络请求。
+  final bool checkUpdates;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -85,7 +93,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
-    _checkUpdateSilently();
+    if (widget.checkUpdates) _checkUpdateSilently();
   }
 
   /// 启动时静默检查更新，仅在有新版本时弹窗。

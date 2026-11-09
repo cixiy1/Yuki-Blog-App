@@ -8,6 +8,7 @@ import '../api/mock/mock_api_client.dart';
 import 'auth_repository.dart';
 import 'media_repository.dart';
 import 'message_repository.dart';
+import 'portal_repository.dart';
 import 'session_controller.dart';
 import 'token_store.dart';
 
@@ -65,6 +66,7 @@ class CampusServices {
   late final AuthRepository auth = ApiAuthRepository(api);
   late final MediaRepository media = ApiMediaRepository(api);
   late final MessageRepository messages = ApiMessageRepository(api);
+  late final PortalRepository portal = ApiPortalRepository(api);
 
   /// 拉一次未读数。失败静默——角标不显示比报错好。
   Future<void> refreshUnread() async {

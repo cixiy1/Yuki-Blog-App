@@ -1,5 +1,7 @@
 import 'handlers/auth_handlers.dart';
 import 'handlers/media_handlers.dart';
+import 'handlers/message_handlers.dart';
+import 'handlers/portal_handlers.dart';
 import 'mock_router.dart';
 
 /// 把各模块的 handler 挂到同一张路由表上。
@@ -8,5 +10,7 @@ MockRouter buildMockRouter() {
   final router = MockRouter();
   registerAuthHandlers(router);
   registerMediaHandlers(router);
+  registerPortalHandlers(router);
+  registerMessageHandlers(router);
   return router;
 }
