@@ -34,6 +34,15 @@ void main() {
       expect(UpdateService.isNewer('  V1.2.0  ', '1.1.0'), isTrue);
       expect(UpdateService.isNewer('v1.x.0', '1.1.0'), isFalse);
     });
+
+    test('带版本名后缀（x.xx-名称，无 +build）', () {
+      // 后缀里的字母会让 parseInt 失败按 0：`1.4.12-test` 必须按 1.4.12 比，
+      // 否则比 1.4.11 还小，永远检测不到更新。
+      expect(UpdateService.isNewer('v1.4.12-test', '1.4.11'), isTrue);
+      expect(UpdateService.isNewer('v1.4.12-test', '1.4.12-test'), isFalse);
+      expect(UpdateService.isNewer('v1.4.12-test', '1.4.13-weekview'), isFalse);
+      expect(UpdateService.isNewer('1.4.12-test', '1.4.11+22'), isTrue);
+    });
   });
 
   group('stripMarkdown 更新说明清洗', () {

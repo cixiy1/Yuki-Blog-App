@@ -90,7 +90,8 @@ class UpdateService {
   }
 
   /// 语义化版本比较：remote 大于 current 返回 true。
-  /// 兼容 `v` 前缀与 `+build` 后缀，解析失败的段按 0 处理。
+  /// 兼容 `v` 前缀、`+build` 与 `-版本名` 后缀（如 `v1.4.12-test`），
+  /// 解析失败的段按 0 处理。
   static bool isNewer(String remote, String current) {
     final r = _parse(remote);
     final c = _parse(current);
@@ -104,6 +105,10 @@ class UpdateService {
     final core = version
         .trim()
         .replaceFirst(RegExp(r'^v', caseSensitive: false), '')
+        // 版本名后缀（`1.4.12-test`）不参与数值比较，先剥掉：
+        // 否则第三段 `12-test` parseInt 失败按 0，会被误判成 1.4.0。
+        .split('-')
+        .first
         .split('+')
         .first;
     final parts = core.split('.');

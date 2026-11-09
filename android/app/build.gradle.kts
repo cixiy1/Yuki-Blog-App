@@ -46,7 +46,11 @@ android {
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
         // flag during build.
-        versionCode = flutter.versionCode
+        // 版本号走 `x.xx-版本名`（pubspec 不再写 `+build`），flutter.versionCode
+        // 拿不到值。这里改用 epoch 天数当 versionCode：单调递增、本地与 CI 一致、
+        // 不依赖 git 历史深度（actions/checkout 默认 fetch-depth=1，commit 数
+        // 会退化成 1）。当前值 ~20000，远大于旧 `+22` 时代，覆盖安装不受影响。
+        versionCode = System.currentTimeMillis().div(86_400_000L).toInt()
         versionName = flutter.versionName
     }
 
