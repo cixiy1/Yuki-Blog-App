@@ -14,5 +14,8 @@
 	     给 Flutter 调试用的 VM service，跟出站请求无关，别拿它顶替。 -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- 图片选择走系统文件面板，沙箱下必须声明用户选择文件可读。 -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 </dict>
 </plist>

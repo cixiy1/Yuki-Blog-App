@@ -53,6 +53,10 @@ class TodoStore {
 
 /// 待办存储接口。页面只依赖这个抽象，换实现（文件 / 内存 / 云）不动 UI。
 abstract class TodoStorage {
+  /// 归属人（学号）。**目前恒为 null**：待办还没跟账号绑定。
+  /// 接入账号后，实现按它把同一台设备上的数据分开。
+  String? get userId;
+
   /// 读出全部待办与墓碑。
   Future<TodoStore> load();
 
@@ -62,10 +66,13 @@ abstract class TodoStorage {
 
 /// 内存实现，仅供测试与预览使用。
 class MemoryTodoStorage implements TodoStorage {
-  MemoryTodoStorage([TodoStore? initial])
+  MemoryTodoStorage([TodoStore? initial, this.userId])
       : _store = initial ?? const TodoStore();
 
   TodoStore _store;
+
+  @override
+  final String? userId;
 
   TodoStore get store => _store;
 
@@ -81,10 +88,15 @@ class MemoryTodoStorage implements TodoStorage {
 /// 不引入额外依赖（[path_provider] 已在工程依赖中，JSON 用标准库）。
 /// 读取失败（文件不存在 / 损坏）一律返回空存储，不因此让页面报错。
 class FileTodoStorage implements TodoStorage {
-  FileTodoStorage(this.directory);
+  FileTodoStorage(this.directory, {this.userId});
 
   /// 目录通常是 `getApplicationDocumentsDirectory()` 的结果（异步获取）。
   final Future<Directory> directory;
+
+  /// 预留：没接入账号前恒为 null，所有人都写同一个 `todos.json`。
+  /// 真接上账号时改成 `todos-<userId>.json`，老数据留作迁移来源。
+  @override
+  final String? userId;
 
   Future<File> get _file async {
     final dir = await directory;

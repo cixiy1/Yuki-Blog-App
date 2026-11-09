@@ -40,16 +40,30 @@ class CampusServices {
   }
 
   /// 应用启动时调一次：建库 / 恢复登录态 / 拉未读数。
+  ///
+  /// 落盘库读不出来时退回内存库——宁可这次启动的数据不持久，
+  /// 也别让「校园服务」整页炸掉。
   static Future<CampusServices> bootstrap() async {
     final existing = _instance;
     if (existing != null) return existing;
 
-    final api = MockApiClient(store: JsonCampusDbStore());
-    await api.ensureLoaded();
+    var api = MockApiClient(store: JsonCampusDbStore());
+    try {
+      await api.ensureLoaded();
+    } catch (error) {
+      debugPrint('本地数据读取失败，改用内存库：$error');
+      api.dispose();
+      api = MockApiClient(store: MemoryCampusDbStore());
+      await api.ensureLoaded();
+    }
 
     final session = SessionController(store: TokenStore(), api: api);
     api.onUnauthorized = () => unawaited(session.expire());
-    await session.restore();
+    try {
+      await session.restore();
+    } catch (error) {
+      debugPrint('登录态恢复失败，按未登录处理：$error');
+    }
 
     final services = CampusServices(api: api, session: session);
     unawaited(services.refreshUnread());

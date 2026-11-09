@@ -8,5 +8,9 @@
 	     在 macOS 上永远「网络同步失败」。 -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- 图片选择走系统文件面板，沙箱下必须声明用户选择文件可读，
+	     否则面板能打开但拿不到数据。 -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 </dict>
 </plist>

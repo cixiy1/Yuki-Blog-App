@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>拍下失物、闲置物品或快递的照片，用于发布校园服务信息。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>选择相册里的照片，用于发布失物招领、二手闲置与活动信息。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>把导出的表单汇总保存到相册（一般不用，仅系统提示所需）。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

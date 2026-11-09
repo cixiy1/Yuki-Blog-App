@@ -39,6 +39,7 @@ class TodoItem {
     this.dueLabel,
     this.source = TodoSource.local,
     this.remoteId,
+    this.ownerId,
     this.deletedAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -85,6 +86,11 @@ class TodoItem {
   /// 远端文章里该条目的稳定 id（博客 `data-todo-id`）。本地新建项为 null。
   final String? remoteId;
 
+  /// 归属人（学号）。**预留字段**：待办目前还不跟账号绑定，一律为 null。
+  /// 将来接入账号时用它把同一台设备上的待办按人切开，现在不参与任何
+  /// 合并与展示逻辑，只跟着 JSON 一起存。
+  final String? ownerId;
+
   /// 移入回收站的时间；null 表示这条待办还在正常列表里。
   ///
   /// 删除一律走软删除：条目本身留在存储里（[TodoStore.items]），只是不再
@@ -108,6 +114,7 @@ class TodoItem {
     String? dueLabel,
     TodoSource? source,
     String? remoteId,
+    String? ownerId,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
   }) =>
@@ -125,6 +132,7 @@ class TodoItem {
         dueLabel: dueLabel ?? this.dueLabel,
         source: source ?? this.source,
         remoteId: remoteId ?? this.remoteId,
+        ownerId: ownerId ?? this.ownerId,
         deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       );
 
@@ -149,6 +157,7 @@ class TodoItem {
         'dueLabel': dueLabel,
         'source': source.name,
         'remoteId': remoteId,
+        'ownerId': ownerId,
         'deletedAt': deletedAt?.toIso8601String(),
       };
 
@@ -181,6 +190,7 @@ class TodoItem {
       dueLabel: json['dueLabel'] as String?,
       source: source,
       remoteId: json['remoteId'] as String?,
+      ownerId: json['ownerId'] as String?,
       deletedAt: deletedRaw == null ? null : DateTime.tryParse(deletedRaw),
     );
   }
