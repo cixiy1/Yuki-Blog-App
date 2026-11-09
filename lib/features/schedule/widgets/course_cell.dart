@@ -6,7 +6,8 @@ import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 /// 课程格子：短名 + 角标 + 教室 + 教师。
 ///
 /// 高度自适应：内容（换行后的课名/角标）超过 [SchedulePalette.cellHeight]
-/// 时卡片向下撑高，行内其他格子由行级 [IntrinsicHeight] 拉伸对齐；
+/// 时卡片向下撑高，网格级 IntrinsicHeight 取最高卡片的高度分给所有行，
+/// 全局卡片尺寸统一；
 /// 配色按状态从主题派生；停课课程名加删除线；
 /// 选中态加 primary 描边（交互反馈）。
 class CourseCell extends StatelessWidget {

@@ -22,8 +22,9 @@ const _headerGap = 2.0;
 ///
 /// - 只渲染**本周有课的星期列**（[WeekSchedule.days]），没课的整天不显示，
 ///   剩下的列用 [Expanded] 平分宽度——列数越少每列越宽；
-/// - 行高由内容决定（[IntrinsicHeight]）：文字放不下的卡片会把整行撑高，
-///   行标列随之拉伸对齐；
+/// - **所有行等高**：整个表体包一层 [IntrinsicHeight]、每行 [Expanded]——
+///   flex 的 intrinsic 算法取「最高一行 × 行数」为总高，每行分到的高度
+///   恰好等于最高行的需求，卡片尺寸全局统一且不截断内容；
 /// - 左侧行标列显示节次号 + 时间段（如 "1-2 / 08:30–10:00"）；
 /// - 今天列在表头高亮（primary 底色胶囊）；
 /// - 左右滑动翻周由外层（课程表页）的手势负责，网格只管渲染。
@@ -68,14 +69,25 @@ class TimetableGrid extends StatelessWidget {
           ),
           const SizedBox(height: _headerGap),
         ],
-        for (final row in schedule.rows)
-          _GridRow(
-            row: row,
-            days: days,
-            selectedKey: selectedKey,
-            onSelectEntry: onSelectEntry,
-            entriesAt: schedule.entriesAt,
+        // 表体整体包 IntrinsicHeight：所有行等高（= 最高行的需求高度），
+        // 卡片尺寸全局统一。行内格子不能再出现 flex 子项——IntrinsicHeight
+        // 的 dry layout 高度无界（见 _GridRow 注释）。
+        IntrinsicHeight(
+          child: Column(
+            children: [
+              for (final row in schedule.rows)
+                Expanded(
+                  child: _GridRow(
+                    row: row,
+                    days: days,
+                    selectedKey: selectedKey,
+                    onSelectEntry: onSelectEntry,
+                    entriesAt: schedule.entriesAt,
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -83,8 +95,11 @@ class TimetableGrid extends StatelessWidget {
 
 /// 表体的一行：行首紧凑行标 + 有课的星期等宽列。
 ///
-/// 用 [IntrinsicHeight] 让行高 = 行内最高格子的实际高度：
-/// 课名长、换行多的卡片把整行撑高，而不是把文字截断。
+/// 行高由外层统一分配（所有行等高）；本行内部用
+/// `crossAxisAlignment: stretch` 让格子拉满行高。
+/// **格子内禁止 flex 子项**（Spacer/Expanded/Flexible）：外层
+/// IntrinsicHeight 走 intrinsic 查询时会对本 Row 做 dry layout，
+/// 该过程高度无界，flex 子项会直接断言。
 class _GridRow extends StatelessWidget {
   const _GridRow({
     required this.row,
@@ -102,34 +117,48 @@ class _GridRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SlotLabelCell(row: row),
-          for (final day in days)
-            Expanded(child: _dayCell(day)),
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SlotLabelCell(row: row),
+        for (final day in days) _dayCell(day),
+      ],
     );
   }
 
+  /// 每天的格子。返回值必须是 Row 的直接 flex 子项（Expanded）——
+  /// stretch 把行高以**紧约束**传下去，单条目卡片才会填满整行，
+  /// 全局卡片高度才真正一致（松约束下卡片会按内容收缩，各行参差）。
   Widget _dayCell(int day) {
     final entries = entriesAt(day, row.key);
     if (entries.isEmpty) {
-      return const EmptyCourseCell();
+      return const Expanded(child: EmptyCourseCell());
     }
-    // 解析器已按「本周实际 > 晚自习 > 非本周」保证一格一条，
-    // 这里仍按列表渲染，留作多条的兜底（纵向堆叠）。
-    return Column(
-      children: entries.map((entry) {
-        return CourseCell(
+    if (entries.length == 1) {
+      final entry = entries.single;
+      return Expanded(
+        child: CourseCell(
           key: ValueKey(entry.key),
           entry: entry,
           isSelected: entry.key == selectedKey,
           onTap: () => onSelectEntry(entry),
-        );
-      }).toList(),
+        ),
+      );
+    }
+    // 解析器已按「本周实际 > 晚自习 > 非本周」保证一格一条，
+    // 多条只作兜底：纵向堆叠，卡片按内容收缩。
+    return Expanded(
+      child: Column(
+        children: [
+          for (final entry in entries)
+            CourseCell(
+              key: ValueKey(entry.key),
+              entry: entry,
+              isSelected: entry.key == selectedKey,
+              onTap: () => onSelectEntry(entry),
+            ),
+        ],
+      ),
     );
   }
 }

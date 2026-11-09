@@ -131,7 +131,29 @@ void main() {
     expect(tuesday.style?.color, isNot(onPrimary));
   });
 
-  testWidgets('卡片文字放不下时向下撑高：窄视口下行高超过最小高度', (tester) async {
+  testWidgets('卡片尺寸统一：宽度全等，高度取最高卡片分给所有行', (tester) async {
+    await pumpGrid(tester); // 400 宽
+
+    final cells = tester.renderObjectList<RenderBox>(
+      find.byType(CourseCell),
+    ).map((box) => box.size).toList();
+
+    expect(cells, isNotEmpty);
+    // 宽度：同列等宽（Expanded 平分），全表只出现一种宽度。
+    expect(
+      cells.map((s) => s.width).toSet().length,
+      1,
+      reason: '所有课程卡片宽度应一致',
+    );
+    // 高度：全局等高（最高一行的高度分给所有行）。
+    expect(
+      cells.map((s) => s.height).toSet().length,
+      1,
+      reason: '所有课程卡片高度应一致',
+    );
+  });
+
+  testWidgets('文字放不下时整表撑高：窄视口下行高超过最小高度', (tester) async {
     // 260 宽：有课 5 列时每列 ~40px，长课名换行多行。
     await pumpGrid(tester, size: const Size(260, 1200));
 
@@ -141,11 +163,16 @@ void main() {
     ).map((box) => box.size.height).toList();
 
     expect(renderedHeights, isNotEmpty);
-    // 至少有一张卡片因内容换行被撑到超过最小高度。
+    // 最高的卡片把整表撑到超过最小高度，且所有卡片仍等高。
     expect(
       renderedHeights.reduce((a, b) => a > b ? a : b),
       greaterThan(SchedulePalette.cellHeight),
-      reason: '窄列下长课名应把卡片向下撑高',
+      reason: '窄列下长课名应把整表向下撑高',
+    );
+    expect(
+      renderedHeights.toSet().length,
+      1,
+      reason: '撑高后所有卡片仍应等高',
     );
   });
 
