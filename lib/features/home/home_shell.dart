@@ -15,7 +15,7 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  final List<({IconData icon, IconData selectedIcon, String label, String path})> menuItems = [
+  final List<NavMenuItem> menuItems = [
     (
       icon: Icons.calendar_view_week_outlined,
       selectedIcon: Icons.calendar_view_week,
@@ -36,24 +36,19 @@ class _HomeShellState extends State<HomeShell> {
     ),
   ];
 
-  int _selectedNavIndex = 0;
-
-  final NavUserInfo _userInfo = const NavUserInfo(
-    avatarUrl: "assets/icons/app_icon.png",
-    userName: "雪穗",
-    userDesc: "天涯何处无芳草",
-  );
-
   UpdateService? _updateService;
 
-  /// 当前页标题：按路由推断（抽屉是唯一入口，URL 直达也对得上）。
-  String get _currentTitle {
-    final path = GoRouterState.of(context).uri.path;
-    for (final item in menuItems) {
-      if (path.startsWith(item.path)) return item.label;
-    }
-    return '';
+  /// 当前页标题与选中项：按路由推断（底栏不是唯一入口，URL 直达也对得上）。
+  String get _currentPath => GoRouterState.of(context).uri.path;
+
+  int get _selectedIndex {
+    final index = menuItems.indexWhere((item) => _currentPath.startsWith(item.path));
+    return index < 0 ? 0 : index;
   }
+
+  String get _currentTitle => _selectedIndex < menuItems.length
+      ? menuItems[_selectedIndex].label
+      : '';
 
   @override
   void initState() {
@@ -83,17 +78,11 @@ class _HomeShellState extends State<HomeShell> {
     // 标题栏的滚动监听 / 折叠状态 / 路由切换复位都由 ImmersiveScaffold 内部处理
     return ImmersiveScaffold(
       title: _currentTitle,
-      drawer: AppNavigationDrawer(
-        selectedIndex: _selectedNavIndex,
+      bottomNavigationBar: AppBottomNav(
+        selectedIndex: _selectedIndex,
         menuItems: menuItems,
-        userInfo: _userInfo,
         onDestinationSelected: (int index) {
-          setState(() {
-            _selectedNavIndex = index;
-          });
-          Navigator.pop(context);
-          final item = menuItems[index];
-          context.go(item.path);
+          context.go(menuItems[index].path);
         },
       ),
       body: widget.child,

@@ -85,14 +85,6 @@ class AppTheme {
         }),
       ),
 
-      // ── NavigationDrawer（M3 抽屉）───────────────────────
-      navigationDrawerTheme: NavigationDrawerThemeData(
-        backgroundColor: colorScheme.surface,
-        elevation: 0,
-        indicatorColor: colorScheme.secondaryContainer,
-        tileHeight: 56,
-      ),
-
       // ── ListTile（Drawer 菜单行）─────────────────────────
       listTileTheme: const ListTileThemeData(
         shape: RoundedRectangleBorder(
