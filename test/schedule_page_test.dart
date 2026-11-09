@@ -117,6 +117,8 @@ void main() {
   testWidgets('网络同步失败时置顶展示离线数据提醒', (tester) async {
     final staleRepo = SyncTimetableRepository(
       client: MockClient((req) async => http.Response('offline', 503)),
+      // 不碰 path_provider：测试环境未 mock 平台通道，会挂死 / 留 pending timer。
+      cache: _NoCache(),
     );
     await pumpTall(
       tester,
@@ -140,6 +142,7 @@ void main() {
                 File('assets/data/schedule-2615.json').readAsStringSync()),
             200,
           )),
+      cache: _NoCache(),
     );
     await pumpTall(
       tester,
@@ -291,4 +294,14 @@ void main() {
     // 整条统一模糊：只有一层（分带写法已废）
     expect(find.byType(BackdropFilter), findsOneWidget);
   });
+}
+
+/// 无操作缓存：widget 测试环境没有 path_provider 平台通道实现，
+/// 默认的 FileTimetableCache 会挂死或留下 pending timer，必须注入这个。
+class _NoCache implements TimetableCache {
+  @override
+  Future<String?> read() async => null;
+
+  @override
+  Future<void> write(String raw) async {}
 }
