@@ -23,7 +23,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('当前版本'), findsOneWidget);
-    expect(find.text('1.4.4+14'), findsOneWidget);
+    // 版本显示只带版本名：versionCode 已改为自动生成，不再拼 `+build`
+    expect(find.text('1.4.4'), findsOneWidget);
   });
 
   testWidgets('没有 build 号时只显示版本号', (tester) async {
@@ -74,7 +75,7 @@ void main() {
         .where((c) => c.method == 'Clipboard.setData')
         .map((c) => (c.arguments as Map)['text'])
         .toList();
-    expect(copied, ['1.4.4+14']);
+    expect(copied, ['1.4.4']);
     expect(find.textContaining('已复制版本号'), findsOneWidget);
   });
 

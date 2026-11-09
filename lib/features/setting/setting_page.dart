@@ -16,7 +16,7 @@ class SettingPage extends StatefulWidget {
 class _SettingPageState extends State<SettingPage> {
   bool _checking = false;
 
-  /// 当前安装版本，形如 `1.4.4+14`（读的是系统里的实际值，不是写死的常量）。
+  /// 当前安装版本，形如 `1.4.12`（读的是系统里的实际值，不是写死的常量）。
   String? _version;
 
   /// 是否已经读过一次版本（区分「读取中」与「读不到」）。
@@ -31,10 +31,10 @@ class _SettingPageState extends State<SettingPage> {
   Future<void> _loadVersion() async {
     String? version;
     try {
+      // 只显示版本名（`1.4.12`），不带内部 buildNumber：versionCode 现在是
+      // epoch 天数（自动生成），拼出来只会是 `1.4.12+20636` 这种噪音。
       final info = await PackageInfo.fromPlatform();
-      version = info.buildNumber.isEmpty
-          ? info.version
-          : '${info.version}+${info.buildNumber}';
+      version = info.version;
     } catch (_) {
       version = null; // 取不到就不显示，不因此报错
     }
