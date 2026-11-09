@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yuki_blog_app/widgets/immersive_app_bar.dart';
 import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
 /// 把「模糊层对不对」钉在**真实光栅化结果**上。
@@ -14,7 +13,8 @@ import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 /// 取图后逐行量这条边的**过渡宽度** —— 越糊越宽、一刀切为 0。
 ///
 /// 于是三条不变量都能直接量出来：
-///   ① 标题栏内每一行都该是满糊（σ=20）；
+///   ① 标题栏内每一行都该是满糊（σ=20）—— **贴顶也是**（2026-11-09 起
+///      全程模糊，不再有「贴顶全透明」的贴顶态）；
 ///   ② 整条上下一致 —— 一层、一个 σ，没有残留分带造成的强弱带；
 ///   ③ 条外必须是 0（一旦 > 0 就是「整页糊」的回归）。
 ///
@@ -67,7 +67,7 @@ void main() {
     return (b - a).abs();
   }
 
-  testWidgets('滚动态：整条统一模糊，且一点都没糊到标题栏外面', (tester) async {
+  testWidgets('全程模糊：贴顶与滚动后整条统一模糊，且一点都没糊到标题栏外面', (tester) async {
     const statusBar = 60.0;
     const barHeight = 116; // = statusBar + kToolbarHeight（60 + 56）
     expect(barHeight, statusBar + kToolbarHeight);
@@ -126,54 +126,54 @@ void main() {
       return (bytes, width);
     }
 
-    // ── 贴顶态：整条都不该有模糊（连模糊层都不铺）────────────────────
-    var (rgba, width) = await grab();
-    for (var y = 8; y < barHeight - 4; y += 8) {
-      final w = edgeWidth(rgba, width, y);
-      expect(w, anyOf(isNull, lessThan(1.5)),
-          reason: '贴顶态 y=$y 处不该有模糊，实测过渡宽度 $w');
+    /// 三条不变量的量法（σ=20 时硬边的 10%→90% 过渡宽度实测 40~50px）。
+    void expectUniformlyBlurred(Uint8List rgba, int width, String phase) {
+      // 逐行采样（跳过最顶上几行：那儿的模糊会取到状态栏区域的像素，
+      // 对比度天然变低、测出来偏小，属于测量边界而不是渲染问题）
+      final rows = <int, double>{};
+      for (var y = 12; y <= barHeight - 8; y += 4) {
+        final w = edgeWidth(rgba, width, y);
+        if (w != null) rows[y] = w;
+      }
+      expect(rows.length, greaterThanOrEqualTo(15),
+          reason: '$phase：标题栏内大部分行都该能量到硬边（实际 ${rows.length} 行）');
+
+      final values = rows.values.toList();
+      final mn = values.reduce((a, b) => a < b ? a : b);
+      final mx = values.reduce((a, b) => a > b ? a : b);
+
+      // ① 真糊了：σ=20 时硬边的 10%→90% 过渡宽度在 30px 以上（实测 40~50）
+      expect(mn, greaterThanOrEqualTo(25),
+          reason: '$phase：最小过渡宽度 $mn，说明有地方没糊');
+
+      // ② 整条一致：上下任何两行都不该差出可见的量。
+      //
+      // 阈值 10：留足渲染后端的量化抖动（CanvasKit 与 Skia 的模糊实现略有差异，
+      // 8bit 量化在插值时会被放大，实测抖动 2~4px）。而一旦有人把横切分带加
+      // 回来，差 1 个 σ（≈2.5px）还能过，差到 6 个 σ（≈15px）就会挂 ——
+      // 那正是用户说的「割裂」。
+      expect(mx - mn, lessThanOrEqualTo(10),
+          reason: '$phase：整条模糊强度不均（$mn ~ $mx），像是残留了分带');
+
+      // ③ 条外：必须一刀切。这里一旦出现扩散，就是「整页糊」回归了。
+      for (final y in [barHeight + 8, barHeight + 40, barHeight + 120]) {
+        expect(edgeWidth(rgba, width, y), lessThan(1.5),
+            reason: '$phase：标题栏外面（y=$y）必须是清晰的一刀切');
+      }
     }
 
-    // ── 滚过阈值：材质渐显 ────────────────────────────────────────────
+    // ── 贴顶态（未滚动）：全程模糊，整条就该是糊的 ────────────────────
+    var (rgba, width) = await grab();
+    expectUniformlyBlurred(rgba, width, '贴顶态');
+
+    // ── 滚一段距离：玻璃照常，不该有任何变化 ──────────────────────────
     tester
         .state<ScrollableState>(find.byType(Scrollable).first)
         .position
-        .jumpTo(kImmersiveScrollThreshold + 60);
-    await tester.pumpAndSettle(); // 等 360ms 渐变走完
+        .jumpTo(110);
+    await tester.pumpAndSettle();
 
     (rgba, width) = await grab();
-
-    // 逐行采样（跳过最顶上几行：那儿的模糊会取到状态栏区域的像素，
-    // 对比度天然变低、测出来偏小，属于测量边界而不是渲染问题）
-    final rows = <int, double>{};
-    for (var y = 12; y <= barHeight - 8; y += 4) {
-      final w = edgeWidth(rgba, width, y);
-      if (w != null) rows[y] = w;
-    }
-    expect(rows.length, greaterThanOrEqualTo(15),
-        reason: '标题栏内大部分行都该能量到硬边（实际 ${rows.length} 行）');
-
-    final values = rows.values.toList();
-    final mn = values.reduce((a, b) => a < b ? a : b);
-    final mx = values.reduce((a, b) => a > b ? a : b);
-
-    // ① 真糊了：σ=20 时硬边的 10%→90% 过渡宽度在 30px 以上（实测 40~50）
-    expect(mn, greaterThanOrEqualTo(25),
-        reason: '最小过渡宽度 $mn，说明有地方没糊');
-
-    // ② 整条一致：上下任何两行都不该差出可见的量。
-    //
-    // 阈值 10：留足渲染后端的量化抖动（CanvasKit 与 Skia 的模糊实现略有差异，
-    // 8bit 量化在插值时会被放大，实测抖动 2~4px）。而一旦有人把横切分带加
-    // 回来，差 1 个 σ（≈2.5px）还能过，差到 6 个 σ（≈15px）就会挂 ——
-    // 那正是用户说的「割裂」。
-    expect(mx - mn, lessThanOrEqualTo(10),
-        reason: '整条模糊强度不均（$mn ~ $mx），像是残留了分带');
-
-    // ③ 条外：必须一刀切。这里一旦出现扩散，就是「整页糊」回归了。
-    for (final y in [barHeight + 8, barHeight + 40, barHeight + 120]) {
-      expect(edgeWidth(rgba, width, y), lessThan(1.5),
-          reason: '标题栏外面（y=$y）必须是清晰的一刀切');
-    }
+    expectUniformlyBlurred(rgba, width, '滚动态');
   });
 }
