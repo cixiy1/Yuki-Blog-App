@@ -43,16 +43,18 @@ class SchedulePalette {
         _ => scheme.outline,
       };
 
-  /// 行标列宽：只放紧凑节次号（如 "1-2"），整周 7 列才铺得进手机竖屏。
-  static const double labelWidth = 30;
-  static const double cellHeight = 66;
+  /// 行标列宽：节次号 + 两行小字时间段（如 "08:30–10:00" 折行）。
+  static const double labelWidth = 46;
+
+  /// 课程格子的最小高度；课名换行多时卡片向下撑高（内容自适应）。
+  static const double cellHeight = 78;
 }
 
-/// 网格的时段行标（紧凑版）。
+/// 网格的时段行标（节次号 + 时间段）。
 ///
-/// 一屏铺满整周后行标列只有 30px，标准行只显示节次号
-/// （"1-2节" → "1-2"），时间段信息收进课程详情面板；
-/// 自定义行（临时活动）额外带一行起始时间。纯文本，无底色无边框，
+/// 只渲染有课列后行标列放宽到 46px：标准行显示剥掉「节」的节次号
+/// （"1-2节" → "1-2"）+ 两行小字时间段；自定义行（临时活动）行标
+/// 用 tertiary 色区分。纯文本，无底色无边框，
 /// 直接压在页面背景上、靠留白和课程格子区分。
 class SlotLabelCell extends StatelessWidget {
   const SlotLabelCell({super.key, required this.row});
@@ -78,17 +80,21 @@ class SlotLabelCell extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 11.5,
               fontWeight: FontWeight.w600,
               color: row.isCustom ? scheme.tertiary : scheme.onSurface,
             ),
           ),
-          if (row.isCustom && row.timeText.isNotEmpty)
+          if (row.timeText.isNotEmpty)
             Text(
               row.timeText,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 8.5,
+                height: 1.2,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
         ],
       ),

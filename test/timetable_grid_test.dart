@@ -17,10 +17,10 @@ void main() {
   final week = resolver.currentWeek();
   final schedule = resolver.resolve(week);
 
-  /// 手机竖屏宽度（400）：整周 7 列必须一屏铺满，不再横向滚动。
+  /// 手机竖屏宽度（400）：整周必须一屏铺满，不再横向滚动。
   Future<void> pumpGrid(
     WidgetTester tester, {
-    Size size = const Size(400, 900),
+    Size size = const Size(400, 1200),
     void Function(ResolvedEntry)? onSelect,
   }) async {
     tester.view.physicalSize = size;
@@ -50,7 +50,7 @@ void main() {
     (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
   );
 
-  testWidgets('手机宽度下一屏铺满整周：无横向滚动、7 列等宽占满视口', (tester) async {
+  testWidgets('手机宽度下一屏铺满：无横向滚动、网格占满视口宽', (tester) async {
     await pumpGrid(tester); // 400 宽
 
     expect(
@@ -64,20 +64,39 @@ void main() {
       tester.getSize(find.byType(TimetableGrid)).width,
       400,
     );
+  });
 
-    // 表头 7 列：短星期名 一~日 + 各自日期。
-    for (var day = 1; day <= 7; day++) {
+  testWidgets('表头只渲染本周有课的列，没课的整天不显示', (tester) async {
+    await pumpGrid(tester);
+
+    // 有课的列：短星期名 + 日期都在表头。
+    for (final day in schedule.days) {
       expect(
         find.text(weekdayShortNames[day - 1]),
         findsOneWidget,
-        reason: '周${weekdayLabel(day)}列的短星期名应在表头',
+        reason: '周${weekdayLabel(day)}有课，短星期名应在表头',
       );
       final date = DateTime(2026, 10, 26).add(Duration(days: day - 1));
-      expect(find.text('${date.month}/${date.day}'), findsOneWidget);
+      expect(
+        find.text('${date.month}/${date.day}'),
+        findsOneWidget,
+        reason: '周${weekdayLabel(day)}的日期应在表头',
+      );
+    }
+
+    // 没课的列整列不出现（2615 数据周六周日无课）。
+    for (final day in [6, 7]) {
+      if (!schedule.days.contains(day)) {
+        expect(
+          find.text(weekdayShortNames[day - 1]),
+          findsNothing,
+          reason: '周${weekdayLabel(day)}没课，不应渲染该列',
+        );
+      }
     }
   });
 
-  testWidgets('行标紧凑化：每行只留行首一个短节次号', (tester) async {
+  testWidgets('行标：节次号 + 时间段', (tester) async {
     await pumpGrid(tester);
 
     expect(
@@ -85,12 +104,21 @@ void main() {
       findsNWidgets(schedule.rows.length),
       reason: '只有行首一列行标',
     );
-    // "1-2节" → "1-2"：剥掉「节」字。
+    // "1-2节" → "1-2"，且带时间段（截取 "08:30" 开头）。
     expect(find.text('1-2'), findsOneWidget);
+    final firstStandard = schedule.rows
+        .firstWhere((r) => !r.isCustom && r.timeText.isNotEmpty);
+    expect(
+      find.textContaining(firstStandard.timeText.substring(0, 5)),
+      findsWidgets,
+      reason: '行标应显示时间段',
+    );
   });
 
   testWidgets('今天列高亮：短星期名与日期都用 onPrimary 前景色', (tester) async {
     await pumpGrid(tester); // todayWeekday = 1（周一）
+
+    expect(schedule.days, contains(1), reason: '周一应有课（2615 数据）');
 
     final onPrimary = AppTheme.light.colorScheme.onPrimary;
     for (final label in ['一', '10/26']) {
@@ -101,6 +129,24 @@ void main() {
     // 非今天的列不高亮。
     final tuesday = tester.widget<Text>(find.text('二'));
     expect(tuesday.style?.color, isNot(onPrimary));
+  });
+
+  testWidgets('卡片文字放不下时向下撑高：窄视口下行高超过最小高度', (tester) async {
+    // 260 宽：有课 5 列时每列 ~40px，长课名换行多行。
+    await pumpGrid(tester, size: const Size(260, 1200));
+
+    // 用 renderObject 量实际渲染高度。
+    final renderedHeights = tester.renderObjectList<RenderBox>(
+      find.byType(CourseCell),
+    ).map((box) => box.size.height).toList();
+
+    expect(renderedHeights, isNotEmpty);
+    // 至少有一张卡片因内容换行被撑到超过最小高度。
+    expect(
+      renderedHeights.reduce((a, b) => a > b ? a : b),
+      greaterThan(SchedulePalette.cellHeight),
+      reason: '窄列下长课名应把卡片向下撑高',
+    );
   });
 
   testWidgets('点格子触发选中回调', (tester) async {

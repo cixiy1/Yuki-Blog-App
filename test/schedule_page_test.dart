@@ -60,23 +60,29 @@ void main() {
       reason: '「通知」应在「本周调整」上方',
     );
 
-    // 表头固定渲染整周 7 列（一屏铺满布局，周末没课也留空列）：
-    // 短星期名 一~日 + 各自的 M/d 日期。
+    // 表头只渲染本周有课的列（没课的整天不显示，剩余列平分宽度）。
     final resolver = TimetableResolver(data);
+    final viewSchedule = resolver.resolve(realWeek);
     final monday = resolver.mondayOf(realWeek);
-    for (var day = 1; day <= 7; day++) {
+    for (final day in viewSchedule.days) {
       final date = monday.add(Duration(days: day - 1));
       expect(find.text(weekdayShortNames[day - 1]), findsOneWidget,
-          reason: '周${weekdayLabel(day)}的短星期名应在表头');
+          reason: '周${weekdayLabel(day)}有课，短星期名应在表头');
       expect(find.text('${date.month}/${date.day}'), findsOneWidget,
           reason: '第 $day 列（${date.month}/${date.day}）应在表头');
     }
+    for (var day = 1; day <= 7; day++) {
+      if (!viewSchedule.days.contains(day)) {
+        expect(find.text(weekdayShortNames[day - 1]), findsNothing,
+            reason: '周${weekdayLabel(day)}本周没课，不应渲染该列');
+      }
+    }
 
-    // 今天落在本周时，表头出现今天的短星期名与日期。
+    // 今天落在本周且今天有课时，表头出现今天的短星期名。
     final today = DateTime.now();
     expect(
       find.text(weekdayShortNames[today.weekday - 1]),
-      findsOneWidget,
+      viewSchedule.days.contains(today.weekday) ? findsOneWidget : findsNothing,
     );
 
     // 已在本周时不显示「回到本周」

@@ -13,18 +13,19 @@ String weekdayLabel(int day) =>
     day >= 1 && day <= 7 ? _weekdayNames[day] : '周$day';
 
 /// 表头行高。左侧行标列顶部留同样高度，首行行标才和表体首行齐平。
-const _headerHeight = 32.0;
+const _headerHeight = 36.0;
 
 /// 表头与表体之间的缝隙。
 const _headerGap = 2.0;
 
 /// 课表网格：整周一屏铺满，不做横向滚动。
 ///
-/// - 固定渲染周一到周日 7 列，列宽用 [Expanded] 平分剩余宽度，
-///   手机竖屏也能一页看完整周（参照主流课表 App 的紧凑网格）；
-/// - 左侧行标列只留紧凑节次号（如 "1-2"），宽度 [SchedulePalette.labelWidth]；
+/// - 只渲染**本周有课的星期列**（[WeekSchedule.days]），没课的整天不显示，
+///   剩下的列用 [Expanded] 平分宽度——列数越少每列越宽；
+/// - 行高由内容决定（[IntrinsicHeight]）：文字放不下的卡片会把整行撑高，
+///   行标列随之拉伸对齐；
+/// - 左侧行标列显示节次号 + 时间段（如 "1-2 / 08:30–10:00"）；
 /// - 今天列在表头高亮（primary 底色胶囊）；
-/// - 自定义时段行（临时活动）行标用 tertiary 色区分；
 /// - 左右滑动翻周由外层（课程表页）的手势负责，网格只管渲染。
 class TimetableGrid extends StatelessWidget {
   const TimetableGrid({
@@ -51,32 +52,25 @@ class TimetableGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 整周固定 7 列：周末没课也留空列，「一周」的语义完整，列宽也稳定。
-    final days = List<int>.generate(7, (i) => i + 1);
-
-    // 行高 = 该行最大堆叠格数 × 单格高度（含 2px 内边距），
-    // 避免 ListView 无界高度把 stretch 约束撑爆。
-    final rowHeights = schedule.rows.map((row) {
-      final maxEntries = days
-          .map((d) => schedule.entriesAt(d, row.key).length)
-          .fold(1, (a, b) => a > b ? a : b);
-      return maxEntries * (SchedulePalette.cellHeight + 4);
-    }).toList(growable: false);
+    // 只保留本周有课的列；全周无课时列数为 0（页面会另显示无课横幅）。
+    final days = schedule.days;
 
     return Column(
       children: [
-        SizedBox(
-          height: _headerHeight,
-          child: _DayHeaderRow(
-            weekMonday: weekMonday,
-            todayWeekday: todayWeekday,
+        if (days.isNotEmpty) ...[
+          SizedBox(
+            height: _headerHeight,
+            child: _DayHeaderRow(
+              days: days,
+              weekMonday: weekMonday,
+              todayWeekday: todayWeekday,
+            ),
           ),
-        ),
-        const SizedBox(height: _headerGap),
-        for (var i = 0; i < schedule.rows.length; i++)
+          const SizedBox(height: _headerGap),
+        ],
+        for (final row in schedule.rows)
           _GridRow(
-            row: schedule.rows[i],
-            height: rowHeights[i],
+            row: row,
             days: days,
             selectedKey: selectedKey,
             onSelectEntry: onSelectEntry,
@@ -87,11 +81,13 @@ class TimetableGrid extends StatelessWidget {
   }
 }
 
-/// 表体的一行：行首紧凑行标 + 7 天等宽列。
+/// 表体的一行：行首紧凑行标 + 有课的星期等宽列。
+///
+/// 用 [IntrinsicHeight] 让行高 = 行内最高格子的实际高度：
+/// 课名长、换行多的卡片把整行撑高，而不是把文字截断。
 class _GridRow extends StatelessWidget {
   const _GridRow({
     required this.row,
-    required this.height,
     required this.days,
     required this.selectedKey,
     required this.onSelectEntry,
@@ -99,7 +95,6 @@ class _GridRow extends StatelessWidget {
   });
 
   final SlotRow row;
-  final double height;
   final List<int> days;
   final String? selectedKey;
   final ValueChanged<ResolvedEntry> onSelectEntry;
@@ -107,8 +102,7 @@ class _GridRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
+    return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -141,13 +135,15 @@ class _GridRow extends StatelessWidget {
 }
 
 /// 表头行：每列两行——短星期名（"一"）+ 日期（"11/9"）。
-/// 今天列用 primary 底色胶囊高亮。
+/// 今天列用 primary 底色胶囊高亮。只渲染有课的列。
 class _DayHeaderRow extends StatelessWidget {
   const _DayHeaderRow({
+    required this.days,
     required this.weekMonday,
     required this.todayWeekday,
   });
 
+  final List<int> days;
   final DateTime weekMonday;
   final int todayWeekday;
 
@@ -157,7 +153,7 @@ class _DayHeaderRow extends StatelessWidget {
     return Row(
       children: [
         const SizedBox(width: SchedulePalette.labelWidth),
-        for (var day = 1; day <= 7; day++)
+        for (final day in days)
           Expanded(
             child: Center(
               child: Builder(
@@ -167,7 +163,7 @@ class _DayHeaderRow extends StatelessWidget {
                   return Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
-                      vertical: 3,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color: isToday ? scheme.primary : null,
@@ -180,7 +176,7 @@ class _DayHeaderRow extends StatelessWidget {
                           weekdayShortNames[day - 1],
                           maxLines: 1,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12.5,
                             height: 1.15,
                             fontWeight: FontWeight.w700,
                             color: isToday
@@ -192,7 +188,7 @@ class _DayHeaderRow extends StatelessWidget {
                           '${date.month}/${date.day}',
                           maxLines: 1,
                           style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 10.5,
                             height: 1.15,
                             color: isToday
                                 ? scheme.onPrimary
