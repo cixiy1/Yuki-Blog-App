@@ -5,6 +5,7 @@ import 'package:yuki_blog_app/app/theme.dart';
 import 'package:yuki_blog_app/core/todo_repository.dart';
 import 'package:yuki_blog_app/features/todo/todo_model.dart';
 import 'package:yuki_blog_app/features/todo/todo_storage.dart';
+import 'package:yuki_blog_app/features/todo/todo_trash_page.dart';
 
 /// 全局自增 id 生成（避免同微秒内连续添加产生重复）。
 int _idSeq = 0;
@@ -16,8 +17,9 @@ String _generateId() =>
 /// 被 [HomeShell] 的 [ImmersiveScaffold] 包裹，这里只返回 body。
 /// - 打开即自动拉取远端（[TodoRemoteSource]），解析文章里的待办项并合并；
 /// - 合并规则：远端决定「有哪些任务」及其标题/分类/截止；本机的完成状态、
-///   自建任务、对远端任务的删除（墓碑）都持久化保留；
+///   自建任务、对远端任务的删除（回收站 / 墓碑）都持久化保留；
 /// - 离线时回退到上一次合并后的本地数据，不丢本地改动。
+/// - 删除一律进回收站（软删除），回收站里可还原或彻底删除。
 ///
 /// 布局参考博客 Firefly 主题的待办组件：按「人 / 组」（博客 `.todo-group-title`）
 /// 顶层分组、组内按科目（`.todo-subhead`）子分区，圆形成勾选框、顶部进度条、
@@ -84,10 +86,18 @@ class _TodoPageState extends State<TodoPage> {
       }
       final rid = item.remoteId;
       if (rid == null || _deleted.contains(rid)) {
-        // 用户已删除该远端任务 → 墓碑，不再复活。
+        // 已彻底删除（墓碑）→ 不再复活。
         continue;
       }
+      // 无论后面怎么处理，先把这个 id 从「远端新增」池里摘掉，
+      // 否则回收站里的远端项会被重复添加一条。
       final r = remoteById.remove(rid);
+      if (item.trashed) {
+        // 回收站里的远端项冻结：不刷新内容，远端删了也不动，
+        // 留着让用户自己决定还原还是彻底删除。
+        result.add(item);
+        continue;
+      }
       if (r == null) {
         // 远端已移除该项 → 同步移除（不再「存在」）。
         continue;
@@ -176,10 +186,56 @@ class _TodoPageState extends State<TodoPage> {
     _persist();
   }
 
-  void _remove(TodoItem item) {
+  /// 移入回收站（软删除）：条目留在存储里，只是打上删除时间。
+  ///
+  /// 远端项也不写墓碑 —— 墓碑代表「彻底删除、永不再出现」，软删除只是
+  /// 暂时挪走，还原后应当照常跟随远端更新。
+  void _trash(TodoItem item) {
+    setState(() {
+      _items = [
+        for (final e in _items)
+          e.id == item.id ? e.copyWith(deletedAt: DateTime.now()) : e,
+      ];
+    });
+    _persist();
+    // 没挂 Scaffold 的场景（部分单元测试直接 pump 本页）就别调 SnackBar，
+    // 否则 ScaffoldMessenger 会直接断言失败。
+    if (Scaffold.maybeOf(context) == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('已移入回收站：${item.title}'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () => _restore(item),
+        ),
+      ),
+    );
+  }
+
+  /// 从回收站还原。条目若已被彻底删除（找不到），按现状插回列表顶部。
+  void _restore(TodoItem item) {
+    final restored = item.copyWith(clearDeletedAt: true);
+    setState(() {
+      // 还原意图优先于墓碑：万一先「彻底删除」又点了 SnackBar 的撤销，
+      // 不清墓碑的话这条远端项下次同步会被无声抹掉。
+      if (item.remoteId != null) {
+        _deleted = {..._deleted}..remove(item.remoteId);
+      }
+      final exists = _items.any((e) => e.id == item.id);
+      _items = exists
+          ? [for (final e in _items) e.id == item.id ? restored : e]
+          : [restored, ..._items];
+    });
+    _persist();
+  }
+
+  /// 彻底删除单条：从存储里移除；远端项记墓碑，避免下次拉取又回来。
+  void _deleteForever(TodoItem item) {
     setState(() {
       if (item.remoteId != null) {
-        // 远端任务：记入墓碑，下次拉取不再复活。
         _deleted = {..._deleted, item.remoteId!};
       }
       _items = [for (final e in _items) if (e.id != item.id) e];
@@ -187,11 +243,51 @@ class _TodoPageState extends State<TodoPage> {
     _persist();
   }
 
+  /// 清空回收站：把里面所有条目彻底删除。
+  void _emptyTrash() {
+    final victims = _trashed;
+    if (victims.isEmpty) return;
+    setState(() {
+      _deleted = {
+        ..._deleted,
+        for (final e in victims)
+          if (e.remoteId != null) e.remoteId!,
+      };
+      _items = [for (final e in _items) if (!e.trashed) e];
+    });
+    _persist();
+  }
+
+  void _openTrash() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TodoTrashPage(
+          items: _trashed,
+          onRestore: _restore,
+          onDeleteForever: _deleteForever,
+          onEmpty: _emptyTrash,
+        ),
+      ),
+    );
+  }
+
+  /// 正常列表里的条目（不含回收站）。
+  List<TodoItem> get _live => [for (final e in _items) if (!e.trashed) e];
+
+  /// 回收站内容，按删除时间倒序（最近删的在最上面）。
+  List<TodoItem> get _trashed {
+    final list = [for (final e in _items) if (e.trashed) e];
+    list.sort((a, b) => (b.deletedAt ?? b.createdAt)
+        .compareTo(a.deletedAt ?? a.createdAt));
+    return list;
+  }
+
   List<TodoItem> get _visible {
+    final source = _live;
     final filtered = switch (_filter) {
-      _TodoFilter.active => _items.where((e) => !e.done),
-      _TodoFilter.done => _items.where((e) => e.done),
-      _TodoFilter.all => _items.where((_) => true),
+      _TodoFilter.active => source.where((e) => !e.done),
+      _TodoFilter.done => source.where((e) => e.done),
+      _TodoFilter.all => source.where((_) => true),
     };
     final list = [...filtered];
     list.sort((a, b) {
@@ -213,7 +309,7 @@ class _TodoPageState extends State<TodoPage> {
   /// 无科目的项归入该组下的「其他」子区。
   List<_PersonGroupData> get _groups {
     final titles = <String>[];
-    for (final e in _items) {
+    for (final e in _live) {
       final g = e.groupLabel;
       if (!titles.contains(g)) titles.add(g);
     }
@@ -264,11 +360,13 @@ class _TodoPageState extends State<TodoPage> {
   DateTime? _dateFromLabel(String? label) =>
       label == null ? null : _parseLabelDate(label);
 
-  int get _activeCount => _items.where((e) => !e.done).length;
+  int get _activeCount => _live.where((e) => !e.done).length;
 
   double get _progress {
-    if (_items.isEmpty) return 0;
-    return (_items.length - _activeCount) / _items.length;
+    final live = _live;
+    if (live.isEmpty) return 0;
+    final done = live.where((e) => e.done).length;
+    return done / live.length;
   }
 
   Future<void> _showEditor({TodoItem? initial}) async {
@@ -287,7 +385,8 @@ class _TodoPageState extends State<TodoPage> {
   @override
   Widget build(BuildContext context) {
     final groups = _groups;
-    final allDone = _items.isNotEmpty && _activeCount == 0;
+    final live = _live;
+    final allDone = live.isNotEmpty && _activeCount == 0;
 
     return SafeArea(
       top: false,
@@ -304,7 +403,7 @@ class _TodoPageState extends State<TodoPage> {
               ),
               children: [
                 _Header(
-                  total: _items.length,
+                  total: live.length,
                   active: _activeCount,
                   progress: _progress,
                   filter: _filter,
@@ -313,6 +412,8 @@ class _TodoPageState extends State<TodoPage> {
                   syncing: _syncing,
                   offline: _offline,
                   lastSync: _lastSync,
+                  trashed: _trashed.length,
+                  onOpenTrash: _openTrash,
                 ),
                 const SizedBox(height: AppTheme.spacingMd),
                 if (_loading)
@@ -335,7 +436,7 @@ class _TodoPageState extends State<TodoPage> {
                       onEdit: (item) {
                         _showEditor(initial: item);
                       },
-                      onDelete: _remove,
+                      onDelete: _trash,
                     ),
                 if (!_loading && groups.isNotEmpty && allDone)
                   const _DoneNote(),
@@ -369,6 +470,8 @@ class _Header extends StatelessWidget {
     required this.syncing,
     required this.offline,
     required this.lastSync,
+    required this.trashed,
+    required this.onOpenTrash,
   });
 
   final int total;
@@ -380,6 +483,10 @@ class _Header extends StatelessWidget {
   final bool syncing;
   final bool offline;
   final DateTime? lastSync;
+
+  /// 回收站里的条目数（用于入口角标）。
+  final int trashed;
+  final VoidCallback onOpenTrash;
 
   @override
   Widget build(BuildContext context) {
@@ -414,6 +521,17 @@ class _Header extends StatelessWidget {
                 total == 0 ? '暂无待办' : '$active 项待完成 · 共 $total 项',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+            ),
+            IconButton(
+              icon: Badge.count(
+                count: trashed,
+                isLabelVisible: trashed > 0,
+                child: Icon(Icons.restore_from_trash_outlined,
+                    color: scheme.onSurfaceVariant, size: 20),
+              ),
+              onPressed: onOpenTrash,
+              tooltip: '回收站',
+              visualDensity: VisualDensity.compact,
             ),
             IconButton(
               icon: syncing

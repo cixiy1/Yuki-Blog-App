@@ -39,6 +39,7 @@ class TodoItem {
     this.dueLabel,
     this.source = TodoSource.local,
     this.remoteId,
+    this.deletedAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
   final String id;
@@ -84,6 +85,15 @@ class TodoItem {
   /// 远端文章里该条目的稳定 id（博客 `data-todo-id`）。本地新建项为 null。
   final String? remoteId;
 
+  /// 移入回收站的时间；null 表示这条待办还在正常列表里。
+  ///
+  /// 删除一律走软删除：条目本身留在存储里（[TodoStore.items]），只是不再
+  /// 出现在主列表 / 统计里，可从回收站恢复。彻底删除才会真的从存储里移除。
+  final DateTime? deletedAt;
+
+  /// 是否在回收站里。
+  bool get trashed => deletedAt != null;
+
   TodoItem copyWith({
     String? title,
     String? note,
@@ -98,6 +108,8 @@ class TodoItem {
     String? dueLabel,
     TodoSource? source,
     String? remoteId,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       TodoItem(
         id: id,
@@ -113,6 +125,7 @@ class TodoItem {
         dueLabel: dueLabel ?? this.dueLabel,
         source: source ?? this.source,
         remoteId: remoteId ?? this.remoteId,
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       );
 
   /// 展示用的截止文案：优先远端原文，其次按本地日期算。
@@ -136,6 +149,7 @@ class TodoItem {
         'dueLabel': dueLabel,
         'source': source.name,
         'remoteId': remoteId,
+        'deletedAt': deletedAt?.toIso8601String(),
       };
 
   factory TodoItem.fromJson(Map<String, dynamic> json) {
@@ -152,6 +166,7 @@ class TodoItem {
     final createdRaw = json['createdAt'] as String?;
     final startRaw = json['startDate'] as String?;
     final dueRaw = json['dueDate'] as String?;
+    final deletedRaw = json['deletedAt'] as String?;
     return TodoItem(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -166,6 +181,7 @@ class TodoItem {
       dueLabel: json['dueLabel'] as String?,
       source: source,
       remoteId: json['remoteId'] as String?,
+      deletedAt: deletedRaw == null ? null : DateTime.tryParse(deletedRaw),
     );
   }
 }
@@ -190,4 +206,14 @@ String formatStartLabel(DateTime start) {
   if (diff == 0) return '今天开始';
   if (diff == 1) return '明天开始';
   return '${start.month}月${start.day}日开始';
+}
+
+/// 回收站里的「何时删除」文案：刚刚 / N 分钟前 / N 小时前 / N 天前 / N月N日。
+String formatTrashAge(DateTime deletedAt) {
+  final diff = DateTime.now().difference(deletedAt);
+  if (diff.inMinutes < 1) return '刚刚删除';
+  if (diff.inHours < 1) return '${diff.inMinutes} 分钟前删除';
+  if (diff.inDays < 1) return '${diff.inHours} 小时前删除';
+  if (diff.inDays < 30) return '${diff.inDays} 天前删除';
+  return '${deletedAt.month}月${deletedAt.day}日删除';
 }
