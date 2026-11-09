@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/campus/campus_services.dart';
+import '../express/express_list_page.dart';
 import '../lostfound/lost_found_list_page.dart';
 import '../market/market_list_page.dart';
+import '../purchase/purchase_list_page.dart';
 
 /// 六大模块。
 enum CampusModule {
@@ -47,9 +49,19 @@ Future<void> openCampusModule(
         ),
       );
     case CampusModule.express:
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => ExpressListPage(services: subject),
+        ),
+      );
+    case CampusModule.purchase:
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PurchaseListPage(services: subject),
+        ),
+      );
     case CampusModule.activity:
     case CampusModule.form:
-    case CampusModule.purchase:
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${module.label}正在接入'),

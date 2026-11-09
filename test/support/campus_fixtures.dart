@@ -24,12 +24,20 @@ Future<CampusServices> testServices({String? loginAs = '20250101'}) async {
 
   final services = CampusServices(api: api, session: session);
   if (loginAs != null) {
-    final issued = await services.auth.login(
-      studentId: loginAs,
-      password: '123456',
-    );
-    await session.establish(issued);
+    await signInAs(services, loginAs);
     await services.refreshUnread();
   }
   return services;
+}
+
+/// 在同一套后端上换一个账号——模拟「另一个人」接着操作。
+///
+/// 涉及双人协作的模块（接单、互评）都靠它造场景，
+/// 不用再造第二个客户端，数据也不会分成两个库。
+Future<void> signInAs(CampusServices services, String studentId) async {
+  final issued = await services.auth.login(
+    studentId: studentId,
+    password: '123456',
+  );
+  await services.session.establish(issued);
 }

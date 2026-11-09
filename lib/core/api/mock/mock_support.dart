@@ -163,3 +163,34 @@ Map<String, dynamic> paginate<T>(
     'pageSize': pageSize,
   };
 }
+
+/// 这条内容对当前用户是否可见。
+///
+/// 规则：自己发的永远可见；`schoolWide` 全校可见；`classOnly` 只对
+/// 发布者同班的人可见。找不到发布者时放行——宁可多显示，不要凭空吞内容。
+bool visibleToUser(
+  Map<String, dynamic> row,
+  CampusUser user, {
+  required List<Map<String, dynamic>> users,
+  String ownerKey = 'creatorId',
+}) {
+  if (row[ownerKey] == user.id) return true;
+  if (row['scope'] != 'classOnly') return true;
+
+  final ownerId = row[ownerKey];
+  for (final u in users) {
+    if (u['id'] == ownerId) return u['className'] == user.className;
+  }
+  return true;
+}
+
+/// 完成单数 +1。信用分由评价决定，不跟完成数挂钩。
+void bumpCompletedTasks(List<Map<String, dynamic>> users, Object? userId) {
+  if (userId is! String || userId.isEmpty) return;
+  for (final u in users) {
+    if (u['id'] != userId) continue;
+    final done = u['completedTasks'];
+    u['completedTasks'] = (done is int ? done : 0) + 1;
+    return;
+  }
+}

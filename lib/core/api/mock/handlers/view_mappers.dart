@@ -31,13 +31,30 @@ Map<String, dynamic> expressView(Map<String, dynamic> row, String? uid) {
   };
 }
 
-Map<String, dynamic> purchaseView(Map<String, dynamic> row, String? uid) {
+Map<String, dynamic> purchaseView(
+  Map<String, dynamic> row,
+  String? uid,
+  List<Map<String, dynamic>> allReviews,
+) {
   final isOwner = _isMine(row, 'creatorId', uid);
   final isCourier = uid != null && row['courierId'] == uid;
+
+  Map<String, dynamic>? myReview;
+  if (uid != null) {
+    for (final r in allReviews) {
+      if (r['taskId'] == row['id'] && r['fromUserId'] == uid) {
+        myReview = r;
+        break;
+      }
+    }
+  }
+
   return {
     ...row,
     'isMine': isOwner,
     'isCourier': isCourier,
+    'myReview': myReview,
+    'reviewedByMe': myReview != null,
   };
 }
 

@@ -29,12 +29,18 @@ Object? _summary(MockRequest req) {
 
   final express = [
     for (final row in db.express)
-      if (row['status'] == 'pending' && row['creatorId'] != uid) row,
+      if (row['status'] == 'pending' &&
+          row['creatorId'] != uid &&
+          visibleToUser(row, user, users: db.users))
+        row,
   ]..sort(byNewest);
 
   final purchasePending = [
     for (final row in db.purchases)
-      if (row['status'] == 'pending' && row['creatorId'] != uid) row,
+      if (row['status'] == 'pending' &&
+          row['creatorId'] != uid &&
+          visibleToUser(row, user, users: db.users))
+        row,
   ];
 
   // 「待我填」= 进行中且我还没提交过的表单。
