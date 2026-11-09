@@ -6,24 +6,26 @@ import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 const _weekdayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-/// 表头行高。左侧行标列顶部留同样高度，首行行标才和表体首行齐平。
-const _headerHeight = 28.0;
-
-/// 表头与表体之间的缝隙。
-const _headerGap = 2.0;
+/// 表头短星期名（紧凑单字），下标 = 星期几 - 1。
+const weekdayShortNames = ['一', '二', '三', '四', '五', '六', '日'];
 
 String weekdayLabel(int day) =>
     day >= 1 && day <= 7 ? _weekdayNames[day] : '周$day';
 
-/// 课表网格：每天一列 + 行首/行尾内联的时段行标，整体在一个横向滚动视图里。
+/// 表头行高。左侧行标列顶部留同样高度，首行行标才和表体首行齐平。
+const _headerHeight = 32.0;
+
+/// 表头与表体之间的缝隙。
+const _headerGap = 2.0;
+
+/// 课表网格：整周一屏铺满，不做横向滚动。
 ///
-/// 行标内联在每行的行首（放不下时行尾再补一列），和课程格子一起滚动——
-/// 行标跟着内容一起走，不再漂在滚动区之外。
-/// - 一屏放得下时只留左侧行标；放不下时左右各一列（列宽按实际列数扣）；
-/// - 列宽在 [SchedulePalette.cellMinWidth] ~ [SchedulePalette.cellMaxWidth]
-///   之间自适应，窄屏横向滚动；
-/// - 今天列在表头高亮（primary 底色胶囊 + 「今天」）；
-/// - 自定义时段行（临时活动）行标用 tertiary 色区分。
+/// - 固定渲染周一到周日 7 列，列宽用 [Expanded] 平分剩余宽度，
+///   手机竖屏也能一页看完整周（参照主流课表 App 的紧凑网格）；
+/// - 左侧行标列只留紧凑节次号（如 "1-2"），宽度 [SchedulePalette.labelWidth]；
+/// - 今天列在表头高亮（primary 底色胶囊）；
+/// - 自定义时段行（临时活动）行标用 tertiary 色区分；
+/// - 左右滑动翻周由外层（课程表页）的手势负责，网格只管渲染。
 class TimetableGrid extends StatelessWidget {
   const TimetableGrid({
     super.key,
@@ -49,98 +51,59 @@ class TimetableGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // 整周固定 7 列：周末没课也留空列，「一周」的语义完整，列宽也稳定。
+    final days = List<int>.generate(7, (i) => i + 1);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final dayCount = schedule.days.isEmpty ? 1 : schedule.days.length;
-        // 一屏放得下（不必横向滚动）就只留左侧行标；放不下才在行尾再补一列。
-        final fitsWithoutScroll =
-            constraints.maxWidth >=
-            SchedulePalette.labelWidth +
-                dayCount * SchedulePalette.cellMinWidth;
-        final labelColumns = fitsWithoutScroll ? 1 : 2;
-        final available =
-            constraints.maxWidth - SchedulePalette.labelWidth * labelColumns;
-        final cellWidth =
-            (available / dayCount)
-                .clamp(SchedulePalette.cellMinWidth, SchedulePalette.cellMaxWidth)
-                .toDouble();
+    // 行高 = 该行最大堆叠格数 × 单格高度（含 2px 内边距），
+    // 避免 ListView 无界高度把 stretch 约束撑爆。
+    final rowHeights = schedule.rows.map((row) {
+      final maxEntries = days
+          .map((d) => schedule.entriesAt(d, row.key).length)
+          .fold(1, (a, b) => a > b ? a : b);
+      return maxEntries * (SchedulePalette.cellHeight + 4);
+    }).toList(growable: false);
 
-        // 行高 = 该行最大堆叠格数 × 单格高度（含 2px 内边距），
-        // 避免 ListView 无界高度把 stretch 约束撑爆。
-        final rowHeights = schedule.rows.map((row) {
-          final maxEntries = schedule.days
-              .map((d) => schedule.entriesAt(d, row.key).length)
-              .fold(1, (a, b) => a > b ? a : b);
-          return maxEntries * (SchedulePalette.cellHeight + 4);
-        }).toList(growable: false);
-
-        final showTrailingLabel = !fitsWithoutScroll;
-        final totalWidth =
-            SchedulePalette.labelWidth * labelColumns +
-            cellWidth * schedule.days.length;
-
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: totalWidth,
-            child: Column(
-              children: [
-                SizedBox(
-                  height: _headerHeight,
-                  child: _DayHeaderRow(
-                    days: schedule.days,
-                    weekMonday: weekMonday,
-                    todayWeekday: todayWeekday,
-                    cellWidth: cellWidth,
-                    scheme: scheme,
-                    showTrailingLabel: showTrailingLabel,
-                  ),
-                ),
-                const SizedBox(height: _headerGap),
-                for (var i = 0; i < schedule.rows.length; i++)
-                  _GridRow(
-                    row: schedule.rows[i],
-                    height: rowHeights[i],
-                    days: schedule.days,
-                    cellWidth: cellWidth,
-                    selectedKey: selectedKey,
-                    onSelectEntry: onSelectEntry,
-                    entriesAt: schedule.entriesAt,
-                    showTrailingLabel: showTrailingLabel,
-                  ),
-              ],
-            ),
+    return Column(
+      children: [
+        SizedBox(
+          height: _headerHeight,
+          child: _DayHeaderRow(
+            weekMonday: weekMonday,
+            todayWeekday: todayWeekday,
           ),
-        );
-      },
+        ),
+        const SizedBox(height: _headerGap),
+        for (var i = 0; i < schedule.rows.length; i++)
+          _GridRow(
+            row: schedule.rows[i],
+            height: rowHeights[i],
+            days: days,
+            selectedKey: selectedKey,
+            onSelectEntry: onSelectEntry,
+            entriesAt: schedule.entriesAt,
+          ),
+      ],
     );
   }
 }
 
-/// 表体的一行：行首行标 + 按天铺格子（放不下时行尾再补一个行标）。
-/// 行标内联在行内，随内容一起横向滚动。
+/// 表体的一行：行首紧凑行标 + 7 天等宽列。
 class _GridRow extends StatelessWidget {
   const _GridRow({
     required this.row,
     required this.height,
     required this.days,
-    required this.cellWidth,
     required this.selectedKey,
     required this.onSelectEntry,
     required this.entriesAt,
-    required this.showTrailingLabel,
   });
 
   final SlotRow row;
   final double height;
   final List<int> days;
-  final double cellWidth;
   final String? selectedKey;
   final ValueChanged<ResolvedEntry> onSelectEntry;
   final List<ResolvedEntry> Function(int day, String rowKey) entriesAt;
-  final bool showTrailingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -151,8 +114,7 @@ class _GridRow extends StatelessWidget {
         children: [
           SlotLabelCell(row: row),
           for (final day in days)
-            _dayCell(day),
-          if (showTrailingLabel) SlotLabelCell(row: row, alignEnd: true),
+            Expanded(child: _dayCell(day)),
         ],
       ),
     );
@@ -161,51 +123,42 @@ class _GridRow extends StatelessWidget {
   Widget _dayCell(int day) {
     final entries = entriesAt(day, row.key);
     if (entries.isEmpty) {
-      return SizedBox(width: cellWidth, child: const EmptyCourseCell());
+      return const EmptyCourseCell();
     }
     // 解析器已按「本周实际 > 晚自习 > 非本周」保证一格一条，
     // 这里仍按列表渲染，留作多条的兜底（纵向堆叠）。
-    return SizedBox(
-      width: cellWidth,
-      child: Column(
-        children: entries.map((entry) {
-          return CourseCell(
-            key: ValueKey(entry.key),
-            entry: entry,
-            isSelected: entry.key == selectedKey,
-            onTap: () => onSelectEntry(entry),
-          );
-        }).toList(),
-      ),
+    return Column(
+      children: entries.map((entry) {
+        return CourseCell(
+          key: ValueKey(entry.key),
+          entry: entry,
+          isSelected: entry.key == selectedKey,
+          onTap: () => onSelectEntry(entry),
+        );
+      }).toList(),
     );
   }
 }
 
+/// 表头行：每列两行——短星期名（"一"）+ 日期（"11/9"）。
+/// 今天列用 primary 底色胶囊高亮。
 class _DayHeaderRow extends StatelessWidget {
   const _DayHeaderRow({
-    required this.days,
     required this.weekMonday,
     required this.todayWeekday,
-    required this.cellWidth,
-    required this.scheme,
-    required this.showTrailingLabel,
   });
 
-  final List<int> days;
   final DateTime weekMonday;
   final int todayWeekday;
-  final double cellWidth;
-  final ColorScheme scheme;
-  final bool showTrailingLabel;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         const SizedBox(width: SchedulePalette.labelWidth),
-        for (final day in days)
-          SizedBox(
-            width: cellWidth,
+        for (var day = 1; day <= 7; day++)
+          Expanded(
             child: Center(
               child: Builder(
                 builder: (context) {
@@ -213,30 +166,46 @@ class _DayHeaderRow extends StatelessWidget {
                   final isToday = day == todayWeekday;
                   return Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 6,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: isToday ? scheme.primary : null,
                       borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                     ),
-                    child: Text(
-                      '${weekdayLabel(day)} ${date.month}/${date.day}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isToday ? scheme.onPrimary : scheme.onSurface,
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          weekdayShortNames[day - 1],
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.15,
+                            fontWeight: FontWeight.w700,
+                            color: isToday
+                                ? scheme.onPrimary
+                                : scheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          '${date.month}/${date.day}',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 9,
+                            height: 1.15,
+                            color: isToday
+                                ? scheme.onPrimary
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
               ),
             ),
           ),
-        if (showTrailingLabel)
-          const SizedBox(width: SchedulePalette.labelWidth),
       ],
     );
   }

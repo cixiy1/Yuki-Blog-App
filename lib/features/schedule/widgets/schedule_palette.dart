@@ -43,52 +43,52 @@ class SchedulePalette {
         _ => scheme.outline,
       };
 
-  static const double labelWidth = 58;
+  /// 行标列宽：只放紧凑节次号（如 "1-2"），整周 7 列才铺得进手机竖屏。
+  static const double labelWidth = 30;
   static const double cellHeight = 66;
-  static const double cellMinWidth = 98;
-  static const double cellMaxWidth = 200;
 }
 
-/// 网格的时段行标（如 "1-2节 / 08:30–10:00"）。
+/// 网格的时段行标（紧凑版）。
 ///
-/// 内联在每一行的行首（左列）或行尾（右列），和课程格子一起横向滚动；
-/// 纯文本，无底色无边框，直接压在页面背景上、靠留白和课程格子区分。
-/// 右列传 [alignEnd]，文字右对齐，视觉上才像表格的行头。
+/// 一屏铺满整周后行标列只有 30px，标准行只显示节次号
+/// （"1-2节" → "1-2"），时间段信息收进课程详情面板；
+/// 自定义行（临时活动）额外带一行起始时间。纯文本，无底色无边框，
+/// 直接压在页面背景上、靠留白和课程格子区分。
 class SlotLabelCell extends StatelessWidget {
-  const SlotLabelCell({super.key, required this.row, this.alignEnd = false});
+  const SlotLabelCell({super.key, required this.row});
 
   final SlotRow row;
 
-  /// 右列行标：文字右对齐。
-  final bool alignEnd;
+  /// 标准行标剥掉「节」字：1-2节 → 1-2，11节 → 11。
+  String get shortLabel =>
+      row.label.endsWith('节') ? row.label.substring(0, row.label.length - 1) : row.label;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final align = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final textAlign = alignEnd ? TextAlign.right : TextAlign.left;
     return SizedBox(
       width: SchedulePalette.labelWidth,
       child: Column(
-        crossAxisAlignment: align,
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            row.label,
-            textAlign: textAlign,
+            shortLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: FontWeight.w600,
               color: row.isCustom ? scheme.tertiary : scheme.onSurface,
             ),
           ),
-          if (row.timeText.isNotEmpty)
+          if (row.isCustom && row.timeText.isNotEmpty)
             Text(
               row.timeText,
-              maxLines: 2,
-              textAlign: textAlign,
-              style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
             ),
         ],
       ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuki_blog_app/app/theme.dart';
 import 'package:yuki_blog_app/core/timetable_resolver.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/course_cell.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
@@ -16,10 +17,11 @@ void main() {
   final week = resolver.currentWeek();
   final schedule = resolver.resolve(week);
 
-  /// 窄视口（默认 400）：7 天列撑出横向滚动，才能验证行标跟着内容滚。
+  /// 手机竖屏宽度（400）：整周 7 列必须一屏铺满，不再横向滚动。
   Future<void> pumpGrid(
     WidgetTester tester, {
     Size size = const Size(400, 900),
+    void Function(ResolvedEntry)? onSelect,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -35,7 +37,7 @@ void main() {
               weekMonday: DateTime(2026, 10, 26),
               todayWeekday: 1,
               selectedKey: null,
-              onSelectEntry: (_) {},
+              onSelectEntry: onSelect ?? (_) {},
             ),
           ),
         ),
@@ -48,80 +50,69 @@ void main() {
     (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
   );
 
-  testWidgets('显示不全时左右行标都在，且都内联在滚动里', (tester) async {
-    await pumpGrid(tester); // 400 宽，放不下
+  testWidgets('手机宽度下一屏铺满整周：无横向滚动、7 列等宽占满视口', (tester) async {
+    await pumpGrid(tester); // 400 宽
 
-    // 每行：行首一个 + 行尾一个
     expect(
-      find.byType(SlotLabelCell),
-      findsNWidgets(schedule.rows.length * 2),
-      reason: '放不下时左右各一列行标',
+      horizontalBody(),
+      findsNothing,
+      reason: '整周布局不允许横向滚动',
     );
 
-    final firstLabel = schedule.rows.first.label;
-    // 首行标签在左右两端各出现一次
-    expect(find.text(firstLabel), findsNWidgets(2));
-    final left = find.text(firstLabel).first;
-    final right = find.text(firstLabel).last;
+    // 网格宽度 = 视口宽度（列宽 Expanded 平分，不留缝）。
     expect(
-      tester.getTopLeft(left).dx,
-      lessThan(tester.getTopLeft(right).dx),
-      reason: '右列行标应在左列右侧（行尾）',
+      tester.getSize(find.byType(TimetableGrid)).width,
+      400,
     );
+
+    // 表头 7 列：短星期名 一~日 + 各自日期。
+    for (var day = 1; day <= 7; day++) {
+      expect(
+        find.text(weekdayShortNames[day - 1]),
+        findsOneWidget,
+        reason: '周${weekdayLabel(day)}列的短星期名应在表头',
+      );
+      final date = DateTime(2026, 10, 26).add(Duration(days: day - 1));
+      expect(find.text('${date.month}/${date.day}'), findsOneWidget);
+    }
   });
 
-  testWidgets('横向滚动时，行标随内容一起滚动', (tester) async {
+  testWidgets('行标紧凑化：每行只留行首一个短节次号', (tester) async {
     await pumpGrid(tester);
-
-    final body = horizontalBody();
-    expect(body, findsOneWidget, reason: '整张网格应在一个横向滚动视图里');
-    final position = tester.state<ScrollableState>(body).position;
-    expect(
-      position.maxScrollExtent,
-      greaterThan(0),
-      reason: '窄屏下 7 天列应撑出横向滚动',
-    );
-
-    // 首行左列行标在最左侧（内容 x=0 处）
-    final firstLabel = find.byType(SlotLabelCell).first;
-    final before = tester.getTopLeft(firstLabel);
-
-    await tester.drag(body, const Offset(-160, 0));
-    await tester.pumpAndSettle();
-
-    expect(position.pixels, greaterThan(0), reason: '表体确实滚走了');
-    // 行标内联在行里，应当跟着内容一起向左移，而不是钉死在外层
-    final after = tester.getTopLeft(firstLabel);
-    expect(after.dx, lessThan(before.dx), reason: '行标应随内容一起滚动');
-  });
-
-  testWidgets('宽屏放得下时只有左侧行标，且不横向滚动', (tester) async {
-    await pumpGrid(tester, size: const Size(900, 900));
 
     expect(
       find.byType(SlotLabelCell),
       findsNWidgets(schedule.rows.length),
-      reason: '放得下时只保留左侧一列行标',
+      reason: '只有行首一列行标',
     );
-    expect(
-      tester
-          .state<ScrollableState>(horizontalBody())
-          .position
-          .maxScrollExtent,
-      0,
-      reason: '这个视口能铺下 7 天，不该横向滚动',
-    );
+    // "1-2节" → "1-2"：剥掉「节」字。
+    expect(find.text('1-2'), findsOneWidget);
   });
 
-  testWidgets('窄屏需要横向滚动', (tester) async {
-    await pumpGrid(tester); // 400 宽
+  testWidgets('今天列高亮：短星期名与日期都用 onPrimary 前景色', (tester) async {
+    await pumpGrid(tester); // todayWeekday = 1（周一）
 
-    expect(
-      tester
-          .state<ScrollableState>(horizontalBody())
-          .position
-          .maxScrollExtent,
-      greaterThan(0),
-    );
+    final onPrimary = AppTheme.light.colorScheme.onPrimary;
+    for (final label in ['一', '10/26']) {
+      final text = tester.widget<Text>(find.text(label));
+      expect(text.style?.color, onPrimary,
+          reason: '今天列（周一）的 "$label" 应高亮');
+    }
+    // 非今天的列不高亮。
+    final tuesday = tester.widget<Text>(find.text('二'));
+    expect(tuesday.style?.color, isNot(onPrimary));
+  });
+
+  testWidgets('点格子触发选中回调', (tester) async {
+    ResolvedEntry? picked;
+    await pumpGrid(tester, onSelect: (e) => picked = e);
+
+    final cell = find.byType(CourseCell).first;
+    await tester.tap(cell);
+    await tester.pumpAndSettle();
+
+    expect(picked, isNotNull);
+    final widget = tester.widget<CourseCell>(cell);
+    expect(picked!.key, widget.entry.key);
   });
 }

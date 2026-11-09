@@ -65,11 +65,17 @@ App 与博客 yiyu14.top 各一套，改一处必须改两处：
 - **课表页滚动卡顿（2026-10-24 修）**：`ListView.cacheExtent` 默认 250 → `scrollCacheExtent: ScrollCacheExtent.pixels(800)`（`material.dart` 不导出，需 `import 'package:flutter/rendering.dart' show ScrollCacheExtent;`）；`buildKeywordSpans` 按 `(content, isDark, tiered, baseStyle)` 缓存 256 条 FIFO；更新历改 `Stack`+`Positioned` 拉伸。
 - 基准跑法：`flutter drive --driver=test_driver/integration_test.dart --target=integration_test/scroll_perf_test.dart -d macos --profile`，结果写 `build/integration_response_data.json`（微秒）。判断线：build/rasterizer 平均 >16.7ms 必掉帧。**回归先看「build 超预算帧数」是否为 0**。
 
+## 8.5 课表整周视图（2026-11-09）
+- **一屏铺满整周**：`TimetableGrid` 去掉横向滚动，固定 7 列（周一~周日，周末没课也留空列）用 `Expanded` 平分宽度；行标列 `labelWidth` 58→30，只显示剥掉「节」的短节次号（"1-2节"→"1-2"），时间段信息只在详情面板/自定义行；`cellMinWidth/cellMaxWidth` 常量已删。表头两行：短星期（`weekdayShortNames` 一~日）+ M/d，今天列 primary 胶囊高亮，`_headerHeight` 32。
+- **CourseCell 紧凑版**：课名 `Flexible` + maxLines 4（先压课名保教室/教师两行）、字号 11/9/8.5、角标独立成行（8 号）。手机列宽 ~48px，注意表头两行文字必须带 `height: 1.15` 否则胶囊溢出 3px。
+- **滑动翻周**：`schedule_page` 里 `GestureDetector(onHorizontalDragEnd)`（速度阈值 150）+ `AnimatedSwitcher`（280ms，`_slideDir` 决定滑入方向，layoutBuilder `Alignment.topCenter`）；`_setWeek(week, direction:)` 统一给周条按钮/周次选择/手势用，换周清空选中。周条与网格手势不冲突（横竖轴不同）。
+- **playwright 验证鼠标拖拽的坑**：无头浏览器无动画时不出帧，Chromium 把连续 mousemove 攒到帧边界 → Flutter 只收到 down+up，拖拽变点按（假象：时灵时不灵）。逐帧 `requestAnimationFrame` 强制也不稳定。**验证手势以 widget 测试（tester.fling）为准**，浏览器端真实事件流成功过一次即可确认（debugPrint 日志在浏览器 console，不在 flutter run stdout）。
+
 ## 9. 待办页（todo）
 - 目录 `lib/features/todo/`：`todo_page.dart`(页面) + `todo_model.dart`(TodoItem/TodoCategory/TodoSource) + `todo_storage.dart`(TodoStorage/TodoStore/FileTodoStorage/MemoryTodoStorage)；远端源 `lib/core/todo_repository.dart`(NetworkTodoRemoteSource + parseTodoHtml)。
 - **自动拉取**：打开即拉取博客《待办清单》`https://yiyu14.top/posts/todo/`（回退 raw.githubusercontent.com / cdn.jsdelivr.net 的 `src/content/posts/todo.md`，都含 `.todo-root` HTML；**新增依赖 `html ^0.15.4`**），解析成远端项（data-todo-id / 标题 / 分组→分类 / .todo-status 截止 / .todo-note 备注 / .todo-subhead 子标题上下文）。**不另建 JSON、不碰博客仓库**。
 - **版本管理合并**：远端决定「有哪些任务 + 标题/分类/截止/备注」；本地保留 ①完成状态 ②自建项(source=local) ③对远端项的删除(墓碑 `deletedRemoteIds`)。本地自建项原样保留；远端项按 `remoteId` 刷新内容、保留 done；远端已移除丢弃；墓碑项不再复活。编辑远端项转本地自建以免被覆盖。远端无「完成态」概念（纯本地）。
-- **布局（2026-10-26 重写对齐网页 Firefly）**：按分类分组（淡主色容器 + 主色左边线组标题，去掉卡片与分类 chip）、`TodoCheckCircle` 圆形成勾选框、顶部进度条 + `SegmentedButton` 筛选 + 同步状态/手动刷新、截止日胶囊徽标、备注左边线、滑动删除。FAB 仍在 body 内 `Positioned`（非 Scaffold FAB）。头部 `InkWell` 需 `Material` 祖先——`_TodoTile` 用 `Material(type: transparency)` 包裹。
+- **布局（对齐网页版分类）**：分组维度与网页 Firefly 一致 = 顶层按「人/组」(`TodoItem.group`，来自博客 `.todo-group-title`，如「雪穗的待办」「软件2615同学待办」) 分块；组内再按科目(`subject`，来自 `.todo-subhead`) 子分区；无科目项归入该组下「其他」子区。本地自建项 `group` 为 null → `groupLabel` 兜底为分类默认组名（个人→我的待办 / 班级事务→班级事务 / 党务→党务 / 其他→其他）。`_PersonGroup` 卡片：组头带分类图标+计数，卡内按科目子区块罗列条目。`TodoCheckCircle` 圆形成勾选框、顶部进度条 + `SegmentedButton` 筛选 + 同步状态/手动刷新、截止日胶囊徽标、备注左边线、滑动删除。FAB 在 body 内 `Positioned`。头部 `InkWell` 需 `Material` 祖先——`_TodoTile` 用 `Material(type: transparency)` 包裹。
 - 排序：未完成在前、有截止日(dueDate 或标签解析日期)靠前、再按 createdAt。id=时间戳+自增；远端项 id=`remote-<data-todo-id>`。
 - 测试：`test/todo_page_test.dart`(注入 MemoryTodoStorage/FakeRemote) + `test/todo_repository_test.dart`(解析器)。全量 140 项测试全绿。
 - 待定：备注长文是否接 keyword_highlight（当前未接）。

@@ -100,6 +100,11 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
   late TimetableResolver _resolver;
   late int _realWeek;
   late int _viewWeek;
+
+  /// 最近一次翻周的方向：+1 往后翻（新内容从右侧滑入），-1 往前翻。
+  /// 驱动网格的滑动过渡动画方向。
+  int _slideDir = 1;
+
   String? _selectedKey;
 
   @override
@@ -119,6 +124,19 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
       _viewWeek = _realWeek;
       _selectedKey = null;
     }
+  }
+
+  /// 切换浏览周次（周条按钮与网格左右滑动共用）。
+  ///
+  /// 越界自动夹紧；换周后选中态清空（那一格在新周里未必存在）。
+  void _setWeek(int week, {required int direction}) {
+    final target = week.clamp(1, widget.data.meta.totalWeeks).toInt();
+    if (target == _viewWeek) return;
+    setState(() {
+      _slideDir = direction;
+      _viewWeek = target;
+      _selectedKey = null;
+    });
   }
 
   void _selectEntry(ResolvedEntry entry) {
@@ -177,26 +195,66 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           currentWeek: _realWeek,
           weekMonday: monday,
           weekSunday: sunday,
-          onPrev: () => setState(() => _viewWeek = (_viewWeek - 1).clamp(1, meta.totalWeeks).toInt()),
-          onNext: () => setState(() => _viewWeek = (_viewWeek + 1).clamp(1, meta.totalWeeks).toInt()),
-          onToday: () => setState(() => _viewWeek = _realWeek),
+          onPrev: () => _setWeek(_viewWeek - 1, direction: -1),
+          onNext: () => _setWeek(_viewWeek + 1, direction: 1),
+          onToday: () => _setWeek(_realWeek, direction: _realWeek >= _viewWeek ? 1 : -1),
           onPickWeek: () => showWeekPicker(
             context,
             week: _viewWeek,
             totalWeeks: meta.totalWeeks,
             currentWeek: _realWeek,
             week1Monday: meta.week1Monday,
-            onPick: (w) => setState(() => _viewWeek = w),
+            onPick: (w) => _setWeek(w, direction: w >= _viewWeek ? 1 : -1),
           ),
         ),
         const SizedBox(height: AppTheme.spacingMd),
         if (!schedule.hasClass) _NoClassBanner(week: _viewWeek),
-        TimetableGrid(
-          schedule: schedule,
-          weekMonday: monday,
-          todayWeekday: todayWeekday,
-          selectedKey: _selectedKey,
-          onSelectEntry: _selectEntry,
+        // 网格左右滑动翻周：手势识别在水平方向，与外层纵向列表不冲突；
+        // 换周时旧网格滑出、新网格从手势方向滑入（_slideDir 决定方向）。
+        GestureDetector(
+          onHorizontalDragEnd: (details) {
+            final v = details.primaryVelocity ?? 0;
+            if (v < -150) {
+              _setWeek(_viewWeek + 1, direction: 1);
+            } else if (v > 150) {
+              _setWeek(_viewWeek - 1, direction: -1);
+            }
+          },
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeIn,
+            // 顶部对齐：过渡中两份网格高度可能不同，别让它们垂直居中跳动。
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                ...previousChildren,
+                ?currentChild,
+              ],
+            ),
+            transitionBuilder: (child, animation) {
+              // 入场从手势方向滑入；离场（动画从 1 回 0）滑向反方向。
+              final dir =
+                  child.key == ValueKey(_viewWeek) ? _slideDir : -_slideDir;
+              return SlideTransition(
+                position: Tween(
+                  begin: Offset(0.16 * dir, 0),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: FadeTransition(opacity: animation, child: child),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(_viewWeek),
+              child: TimetableGrid(
+                schedule: schedule,
+                weekMonday: monday,
+                todayWeekday: todayWeekday,
+                selectedKey: _selectedKey,
+                onSelectEntry: _selectEntry,
+              ),
+            ),
+          ),
         ),
         // 选中课程后，详情紧贴课表网格（在通知之上）：点的哪一格、就接着
         // 在它下面看这一格的信息，不用跨过通知区去找。

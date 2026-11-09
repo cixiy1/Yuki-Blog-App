@@ -60,28 +60,23 @@ void main() {
       reason: '「通知」应在「本周调整」上方',
     );
 
-    // 表头：只渲染**有课的星期列**（resolver 的 days =「数据里出现过的
-    // 星期」∪「本周有条目的星期」，2615 班没有周六日的课），所以断言必须
-    // 从 days 反推，不能假定「今天一定有列」——2026-10-17 周六踩过：
-    // 原来写死断「今天列存在」，周五能过、一到周末必挂。
+    // 表头固定渲染整周 7 列（一屏铺满布局，周末没课也留空列）：
+    // 短星期名 一~日 + 各自的 M/d 日期。
     final resolver = TimetableResolver(data);
-    final viewSchedule = resolver.resolve(realWeek);
     final monday = resolver.mondayOf(realWeek);
-    expect(viewSchedule.days, isNotEmpty);
-    for (final day in viewSchedule.days) {
+    for (var day = 1; day <= 7; day++) {
       final date = monday.add(Duration(days: day - 1));
-      expect(
-        find.text('${weekdayLabel(day)} ${date.month}/${date.day}'),
-        findsOneWidget,
-        reason: '第 $day 列（${date.month}/${date.day}）应在表头',
-      );
+      expect(find.text(weekdayShortNames[day - 1]), findsOneWidget,
+          reason: '周${weekdayLabel(day)}的短星期名应在表头');
+      expect(find.text('${date.month}/${date.day}'), findsOneWidget,
+          reason: '第 $day 列（${date.month}/${date.day}）应在表头');
     }
 
-    // 今天落在本周、且本周确实有这一列时，表头才该出现今天的标签。
+    // 今天落在本周时，表头出现今天的短星期名与日期。
     final today = DateTime.now();
     expect(
-      find.text('${weekdayLabel(today.weekday)} ${today.month}/${today.day}'),
-      viewSchedule.days.contains(today.weekday) ? findsOneWidget : findsNothing,
+      find.text(weekdayShortNames[today.weekday - 1]),
+      findsOneWidget,
     );
 
     // 已在本周时不显示「回到本周」
@@ -234,6 +229,30 @@ void main() {
     expect(find.text('回到本周'), findsOneWidget);
 
     await tester.tap(find.text('回到本周'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 $realWeek 周'), findsOneWidget);
+    expect(find.text('回到本周'), findsNothing);
+  });
+
+  testWidgets('网格左右滑动切换周次，周条文案联动', (tester) async {
+    await pumpTall(tester, wrapApp());
+
+    // 往左滑 = 下一周（内容向左走）。
+    await tester.fling(
+      find.byType(TimetableGrid),
+      const Offset(-400, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('第 ${realWeek + 1} 周'), findsOneWidget);
+    expect(find.text('回到本周'), findsOneWidget);
+
+    // 往右滑 = 上一周，滑回本周。
+    await tester.fling(
+      find.byType(TimetableGrid),
+      const Offset(400, 0),
+      1200,
+    );
     await tester.pumpAndSettle();
     expect(find.text('第 $realWeek 周'), findsOneWidget);
     expect(find.text('回到本周'), findsNothing);
