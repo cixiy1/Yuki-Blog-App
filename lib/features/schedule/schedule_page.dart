@@ -117,14 +117,20 @@ class _ScheduleBodyState extends State<_ScheduleBody>
     duration: const Duration(milliseconds: 300),
   );
 
+  /// 吸附动画的缓动：easeOutCubic 起步快、收尾缓，接近 PageView 的
+  /// 弹簧手感（控制器本身是线性时钟，曲线在这里叠加）。
+  late final Animation<double> _settleAnim =
+      CurvedAnimation(parent: _settle, curve: Curves.easeOutCubic);
+
   /// 当前水平位移（px）：左滑为负（露出下一周），右滑为正（露出上一周）。
   double _dragDx = 0;
 
   /// 拖拽/吸附过程中露出的相邻周；null = 没有相邻页（边界周或未拖动）。
   int? _neighborWeek;
 
-  /// 吸附动画的位移插值（begin = 松手时位移，end = ±页宽或 0）。
-  Tween<double>? _settleTween;
+  /// 吸附动画的位移插值（begin = 松手时位移，end = ±页宽或 0），
+  /// 已叠加缓动曲线。
+  Animation<double>? _settleTween;
 
   /// 吸附结束时是否翻到 [_pendingTargetWeek]。
   bool _pendingCommit = false;
@@ -146,7 +152,7 @@ class _ScheduleBodyState extends State<_ScheduleBody>
   void _onSettleTick() {
     final tween = _settleTween;
     if (tween == null) return;
-    setState(() => _dragDx = tween.evaluate(_settle));
+    setState(() => _dragDx = tween.value);
   }
 
   void _onSettleStatus(AnimationStatus status) {
@@ -205,10 +211,36 @@ class _ScheduleBodyState extends State<_ScheduleBody>
         : -1;
   }
 
-  /// 周条按钮/周次选择翻周：以滑动动画过渡到目标周（等效一次快速拖拽）。
+  /// 相对翻页（箭头按钮）：以「当前动画的目标周」为基准累加，连点两次
+  /// 「下一周」就翻两周。基准不取 [_viewWeek]——动画进行中它还没提交，
+  /// 取它会让连点重复瞄准同一页。
+  void _shiftWeek(int delta) {
+    final base = (_settle.isAnimating && _pendingTargetWeek != null)
+        ? _pendingTargetWeek!
+        : _viewWeek;
+    _animateToWeek(base + delta);
+  }
+
+  /// 翻到绝对目标周（周次弹层 / 回到本周 / 相对翻页的落点）。
   void _animateToWeek(int week) {
     final target = week.clamp(1, widget.data.meta.totalWeeks).toInt();
     if (target == _viewWeek) return;
+    // 动画进行中再点按钮：先把当前动画立即结算到它的目标周（跳到终态），
+    // 再从干净状态开新动画。不结算的话 begin 是中途位移、_viewWeek 未提交
+    // —— 连点同向会重复设置同一个目标（看起来卡住不动），反向会从半页
+    // 位移横扫到另一侧整页。
+    if (_settle.isAnimating) {
+      _settle.stop();
+      if (_pendingCommit && _pendingTargetWeek != null) {
+        _viewWeek = _pendingTargetWeek!;
+        _selectedKey = null;
+      }
+      _dragDx = 0;
+      _neighborWeek = null;
+      _pendingCommit = false;
+      _pendingTargetWeek = null;
+      if (target == _viewWeek) return;
+    }
     if (_pagerWidth <= 0) {
       // 布局还没量到宽度（极端时序）：直接切换，不播动画。
       setState(() {
@@ -226,7 +258,7 @@ class _ScheduleBodyState extends State<_ScheduleBody>
     _settleTween = Tween(
       begin: _dragDx,
       end: target > _viewWeek ? -_pagerWidth : _pagerWidth,
-    );
+    ).animate(_settleAnim);
     _settle
       ..reset()
       ..forward();
@@ -288,8 +320,8 @@ class _ScheduleBodyState extends State<_ScheduleBody>
           currentWeek: _realWeek,
           weekMonday: monday,
           weekSunday: sunday,
-          onPrev: () => _animateToWeek(_viewWeek - 1),
-          onNext: () => _animateToWeek(_viewWeek + 1),
+          onPrev: () => _shiftWeek(-1),
+          onNext: () => _shiftWeek(1),
           onToday: () => _animateToWeek(_realWeek),
           onPickWeek: () => showWeekPicker(
             context,
@@ -340,7 +372,8 @@ class _ScheduleBodyState extends State<_ScheduleBody>
                 : (_viewWeek + dir).clamp(1, widget.data.meta.totalWeeks).toInt();
             if (target == null || target == _viewWeek) {
               // 弹回：吸附回原位，不翻周。
-              _settleTween = Tween(begin: dx, end: 0);
+              _settleTween =
+                  Tween(begin: dx, end: 0.0).animate(_settleAnim);
               _pendingCommit = false;
               _pendingTargetWeek = null;
               _settle
@@ -351,7 +384,8 @@ class _ScheduleBodyState extends State<_ScheduleBody>
             }
           },
           onHorizontalDragCancel: () {
-            _settleTween = Tween(begin: _dragDx, end: 0);
+            _settleTween =
+                Tween(begin: _dragDx, end: 0.0).animate(_settleAnim);
             _pendingCommit = false;
             _pendingTargetWeek = null;
             _settle

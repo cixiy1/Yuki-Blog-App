@@ -250,6 +250,22 @@ void main() {
     expect(tester.widget<TextButton>(backToToday()).onPressed, isNull);
   });
 
+  testWidgets('动画进行中连点下一周：每次点击都推进一周，不卡住不横扫', (tester) async {
+    // 回归：旧实现动画中再点时 _viewWeek 未提交、begin 是中途位移——
+    // 连点同向会重复设置同一个目标（看起来卡住）。
+    await pumpTall(tester, wrapApp());
+
+    await tester.tap(find.byTooltip('下一周'));
+    // 不等动画结束立刻再点（进入 _settle.isAnimating 分支）
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byTooltip('下一周'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 ${realWeek + 2} 周'), findsOneWidget,
+        reason: '连点两次应翻到第 realWeek+2 周');
+    expect(find.text('第 ${realWeek + 1} 周'), findsNothing);
+  });
+
   testWidgets('网格左右滑动切换周次，周条文案联动', (tester) async {
     await pumpTall(tester, wrapApp());
 

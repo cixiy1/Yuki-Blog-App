@@ -100,12 +100,14 @@ class WeekBar extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 // 「本周」徽章常驻占位，宽度不随出现/消失抖动。
+                // 非本周时透明占位；本周时主色文字（不能用 onPrimary——
+                // 那是给 primary 底上的字用的，裸印在页面背景上近白色）。
                 Text(
                   '本周',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: isCurrent ? scheme.onPrimary : Colors.transparent,
+                    color: isCurrent ? scheme.primary : Colors.transparent,
                   ),
                 ),
                 const SizedBox(width: 2),
@@ -179,13 +181,14 @@ class WeekBar extends StatelessWidget {
                           ),
                           const SizedBox(width: AppTheme.spacingSm),
                           // 「本周」徽章常驻占位，避免按钮位置随标签宽度漂移
+                          // （同宽屏：本周时主色文字，非本周透明占位）。
                           Text(
                             '本周',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: isCurrent
-                                  ? scheme.onPrimary
+                                  ? scheme.primary
                                   : Colors.transparent,
                             ),
                           ),
