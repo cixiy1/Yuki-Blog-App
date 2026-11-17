@@ -7,6 +7,7 @@ import 'package:yuki_blog_app/features/campus/auth/login_page.dart';
 import 'package:yuki_blog_app/features/campus/auth/register_page.dart';
 import 'package:yuki_blog_app/features/campus/portal/campus_portal_page.dart';
 import 'package:yuki_blog_app/features/schedule/schedule_page.dart';
+import 'package:yuki_blog_app/features/splash/splash_page.dart';
 import 'package:yuki_blog_app/features/todo/todo_page.dart';
 import 'package:yuki_blog_app/features/setting/setting_page.dart';
 
@@ -16,10 +17,15 @@ import 'package:yuki_blog_app/features/setting/setting_page.dart';
 /// 不必先把整套服务跑起来。
 GoRouter buildAppRouter({CampusServices? services}) {
   return GoRouter(
-    initialLocation: RoutePaths.home,
+    initialLocation: RoutePaths.splash,
     refreshListenable: services?.session,
     redirect: (context, state) => _guard(services, state),
     routes: [
+      // 启动页不套 Shell，展示完由页面自己跳 home。
+      GoRoute(
+        path: RoutePaths.splash,
+        builder: (context, state) => const SplashPage(),
+      ),
       // 登录 / 注册不套 Shell，整屏显示。
       GoRoute(
         path: RoutePaths.login,

@@ -1,4 +1,7 @@
 class RoutePaths {
+  /// 启动页。App 冷启动的初始落点，展示品牌与标语后跳 [home]。
+  static const String splash = '/splash';
+
   static const String home = '/home';
   static const String schedule = '/schedule';
   static const String todo = '/todo';
