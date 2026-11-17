@@ -211,6 +211,27 @@ class _ScheduleBodyState extends State<_ScheduleBody>
         : -1;
   }
 
+  /// 把任何半途状态立即收敛为「干净状态」：有待提交的周就提交，
+  /// 位移归零、邻周与待定态清空、动画停掉。
+  ///
+  /// 所有翻周入口（按钮 / 手势 / 数据刷新）都先过这里——否则半途状态
+  /// （动画中被手势打断、位移停在中途）会和后续判定互相污染：轻则丢
+  /// 一次点击（目标周碰巧等于未提交的当前周被提前 return），重则从
+  /// 中途位移反向横扫整页，或干脆停在中途谁都推不动（用户截图的
+  /// 「连续切换后卡住」）。
+  void _settleImmediately() {
+    if (_settle.isAnimating) _settle.stop();
+    if (_pendingCommit && _pendingTargetWeek != null) {
+      _viewWeek = _pendingTargetWeek!;
+      _selectedKey = null;
+    }
+    _dragDx = 0;
+    _neighborWeek = null;
+    _pendingCommit = false;
+    _pendingTargetWeek = null;
+    _settleTween = null;
+  }
+
   /// 相对翻页（箭头按钮）：以「当前动画的目标周」为基准累加，连点两次
   /// 「下一周」就翻两周。基准不取 [_viewWeek]——动画进行中它还没提交，
   /// 取它会让连点重复瞄准同一页。
@@ -223,24 +244,11 @@ class _ScheduleBodyState extends State<_ScheduleBody>
 
   /// 翻到绝对目标周（周次弹层 / 回到本周 / 相对翻页的落点）。
   void _animateToWeek(int week) {
+    // 先收敛半途状态，再算目标：结算可能提交新周，「回到本周」这类
+    // 目标恰好是当前周的调用必须基于结算后的周判断，否则点击被吞。
+    _settleImmediately();
     final target = week.clamp(1, widget.data.meta.totalWeeks).toInt();
     if (target == _viewWeek) return;
-    // 动画进行中再点按钮：先把当前动画立即结算到它的目标周（跳到终态），
-    // 再从干净状态开新动画。不结算的话 begin 是中途位移、_viewWeek 未提交
-    // —— 连点同向会重复设置同一个目标（看起来卡住不动），反向会从半页
-    // 位移横扫到另一侧整页。
-    if (_settle.isAnimating) {
-      _settle.stop();
-      if (_pendingCommit && _pendingTargetWeek != null) {
-        _viewWeek = _pendingTargetWeek!;
-        _selectedKey = null;
-      }
-      _dragDx = 0;
-      _neighborWeek = null;
-      _pendingCommit = false;
-      _pendingTargetWeek = null;
-      if (target == _viewWeek) return;
-    }
     if (_pagerWidth <= 0) {
       // 布局还没量到宽度（极端时序）：直接切换，不播动画。
       setState(() {
@@ -249,14 +257,14 @@ class _ScheduleBodyState extends State<_ScheduleBody>
       });
       return;
     }
-    _settle.stop();
     setState(() {
       _neighborWeek = target;
       _pendingCommit = true;
       _pendingTargetWeek = target;
     });
+    // 结算后位移恒为 0，新动画从居中起步。
     _settleTween = Tween(
-      begin: _dragDx,
+      begin: 0.0,
       end: target > _viewWeek ? -_pagerWidth : _pagerWidth,
     ).animate(_settleAnim);
     _settle
@@ -339,7 +347,10 @@ class _ScheduleBodyState extends State<_ScheduleBody>
         // 方向识别，与外层纵向列表不冲突。
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (_) => _settle.stop(),
+          // 按下即结算半途动画：待提交的周立即提交、位移归零。此后拖拽
+          // 位移从 0 累计、松手判定以已提交的周为基准——否则动画中拖拽
+          // 会把未提交的 pending 和中途位移带进判定，松手方向算错。
+          onHorizontalDragStart: (_) => _settleImmediately(),
           onHorizontalDragUpdate: (details) => setState(() {
             _dragDx += details.delta.dx;
             final total = widget.data.meta.totalWeeks;

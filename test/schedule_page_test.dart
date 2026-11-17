@@ -266,6 +266,43 @@ void main() {
     expect(find.text('第 ${realWeek + 1} 周'), findsNothing);
   });
 
+  testWidgets('翻周动画进行中点「回到本周」不被吞掉', (tester) async {
+    // 回归：目标周恰好等于（尚未提交的）当前周时，旧实现在结算前
+    // 提前 return，这次点击被吞、最终停在下一周。
+    await pumpTall(tester, wrapApp());
+
+    await tester.tap(find.byTooltip('下一周'));
+    await tester.pump(const Duration(milliseconds: 50)); // 动画进行中
+    await tester.tap(find.text('回到本周'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 $realWeek 周'), findsOneWidget);
+  });
+
+  testWidgets('翻周动画中途改为拖拽：结算后从干净状态跟随手指', (tester) async {
+    // 回归：动画被手势打断时只 stop 不结算，pending 与中途位移带进
+    // 后续判定；「连续切换后卡住」即半途状态无入口可收敛。
+    await pumpTall(tester, wrapApp());
+
+    await tester.tap(find.byTooltip('下一周'));
+    await tester.pump(const Duration(milliseconds: 50)); // 动画进行中
+
+    // 手指按下网格（触发结算：pending 立即提交为当前周），
+    // 小幅拖拽不足阈值后松手 → 弹回，稳定停在下一周。
+    // 动画中本周与相邻周网格同屏，取第一张（当前周）。
+    final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(TimetableGrid).first));
+    await gesture.moveBy(const Offset(-8, 0));
+    await gesture.moveBy(const Offset(-8, 0));
+    await gesture.moveBy(const Offset(-8, 0));
+    await gesture.moveBy(const Offset(-30, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 ${realWeek + 1} 周'), findsOneWidget);
+    expect(tester.widget<TextButton>(backToToday()).onPressed, isNotNull);
+  });
+
   testWidgets('网格左右滑动切换周次，周条文案联动', (tester) async {
     await pumpTall(tester, wrapApp());
 
