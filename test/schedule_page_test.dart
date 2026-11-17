@@ -15,12 +15,12 @@ import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
 import 'package:yuki_blog_app/models/timetable.dart';
 import 'package:yuki_blog_app/widgets/immersive_scaffold.dart';
 
-/// 「回到本周」现在是常驻占位（隐藏时保布局高度），断言改为
-  /// 检查按钮是否可点（本周 = 隐藏且禁用）。
-  Finder backToToday() => find.ancestor(
-    of: find.text('回到本周'),
-    matching: find.byType(TextButton),
-  );
+/// 「回到本周」现在是网格右下角的悬浮胶囊（不占布局流，本周时透明 + 禁用），
+/// 断言检查按钮是否可点（本周 = 禁用）。
+Finder backToToday() => find.ancestor(
+  of: find.text('回到本周'),
+  matching: find.byType(TextButton),
+);
 
 void main() {
   final data = TimetableData.fromRawJson(
@@ -92,7 +92,7 @@ void main() {
       viewSchedule.days.contains(today.weekday) ? findsOneWidget : findsNothing,
     );
 
-    // 已在本周时「回到本周」隐藏且禁用（常驻占位，不闪布局）。
+    // 已在本周时「回到本周」透明且禁用（悬浮胶囊不占布局，无空白无跳动）。
     expect(find.text('回到本周'), findsOneWidget);
     expect(tester.widget<TextButton>(backToToday()).onPressed, isNull);
 

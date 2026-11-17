@@ -4,10 +4,13 @@ import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 
 /// 周次工具条：上一周 / 周次选择 / 下一周 + 「回到本周」。
 ///
-/// 窄屏：左右箭头夹居中周次标签（两行），「回到本周」在下方单独一行；
+/// 窄屏：左右箭头夹居中周次标签（两行）；「回到本周」不放在周条里 ——
+/// 之前单独占一行、本周时隐藏留白，现在由网格右下角的悬浮胶囊承担
+/// （见 schedule_page，悬浮不占布局流，出现/消失都不产生空白或跳动）。
+///
 /// 宽屏（≥ [SchedulePalette.wideBreakpoint]）对齐网页版 .tt-bar：
 /// 单行内联——上一周 / 第 N 周 + 日期范围 / 下一周 / 回到本周，
-/// 「回到本周」常驻（本周时置灰，对齐网页 .tt-now 的占位策略）。
+/// 「回到本周」常驻置灰（对齐网页 .tt-now 的占位策略，内联按钮不产生空白）。
 /// 按钮位置固定，不随周次标签宽度漂移；到边界周（第 1 / 最后一周）
 /// 自动置灰。
 class WeekBar extends StatelessWidget {
@@ -136,7 +139,8 @@ class WeekBar extends StatelessWidget {
     );
   }
 
-  /// 窄屏：左右箭头 + 居中周次标签，「回到本周」单独一行。
+  /// 窄屏：左右箭头 + 居中周次标签。「回到本周」不在这里 ——
+  /// 改由网格右下角的悬浮胶囊承担（见 schedule_page），周条保持单行紧凑。
   Widget _buildCompact(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isCurrent = week == currentWeek;
@@ -214,22 +218,6 @@ class WeekBar extends StatelessWidget {
               ),
             ),
           ],
-        ),
-        // 「回到本周」常驻占位（网页 .tt-now is-hidden 的 visibility 策略）：
-        // 在本周时只隐藏不撤行，翻周瞬间布局不跳动。
-        Visibility(
-          visible: !isCurrent,
-          maintainSize: true,
-          maintainAnimation: true,
-          maintainState: true,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: isCurrent ? null : onToday,
-              icon: const Icon(Icons.today, size: 16),
-              label: const Text('回到本周'),
-            ),
-          ),
         ),
       ],
     );

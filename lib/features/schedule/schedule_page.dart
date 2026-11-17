@@ -8,6 +8,7 @@ import 'package:yuki_blog_app/models/timetable.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/changelog_panel.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/course_detail_panel.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/notices_panel.dart';
+import 'package:yuki_blog_app/features/schedule/widgets/schedule_palette.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/timetable_grid.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/timetable_legend.dart';
 import 'package:yuki_blog_app/features/schedule/widgets/week_bar.dart';
@@ -362,45 +363,88 @@ class _ScheduleBodyState extends State<_ScheduleBody>
               _pagerWidth = constraints.maxWidth;
               final w = _pagerWidth;
               final progress = w > 0 ? _dragDx / w : 0.0;
-                  final neighbor = _neighborWeek;
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // 当前周：跟随手指位移（FractionalTranslation 只影响
-                      // 绘制/命中测试，不影响布局——Stack 尺寸仍由它决定）。
-                      FractionalTranslation(
-                        translation: Offset(progress, 0),
+              final neighbor = _neighborWeek;
+              final isWide =
+                  w >= SchedulePalette.wideBreakpoint;
+              final isCurrentWeek = _viewWeek == _realWeek;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // 当前周：跟随手指位移（FractionalTranslation 只影响
+                  // 绘制/命中测试，不影响布局——Stack 尺寸仍由它决定）。
+                  FractionalTranslation(
+                    translation: Offset(progress, 0),
+                    child: TimetableGrid(
+                      schedule: schedule,
+                      weekMonday: monday,
+                      todayWeekday: todayWeekday,
+                      selectedKey: _selectedKey,
+                      onSelectEntry: _selectEntry,
+                    ),
+                  ),
+                  // 相邻周：从拖拽方向一侧露出。只约束左右、顶部对齐，
+                  // 高度放开——fill 会把更高的网格压出 overflow。
+                  if (neighbor != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: FractionalTranslation(
+                        translation: Offset(
+                          progress < 0 ? progress + 1 : progress - 1,
+                          0,
+                        ),
                         child: TimetableGrid(
-                          schedule: schedule,
-                          weekMonday: monday,
-                          todayWeekday: todayWeekday,
-                          selectedKey: _selectedKey,
+                          schedule: _scheduleOf(neighbor),
+                          weekMonday: _resolver.mondayOf(neighbor),
+                          todayWeekday: _todayWeekdayOf(neighbor),
+                          selectedKey: null,
                           onSelectEntry: _selectEntry,
                         ),
                       ),
-                      // 相邻周：从拖拽方向一侧露出。只约束左右、顶部对齐，
-                      // 高度放开——fill 会把更高的网格压出 overflow。
-                      if (neighbor != null)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: 0,
-                          child: FractionalTranslation(
-                            translation: Offset(
-                              progress < 0 ? progress + 1 : progress - 1,
-                              0,
+                    ),
+                  // 「回到本周」悬浮胶囊（仅窄屏；宽屏周条内联已有）：
+                  // 叠在网格右下角、不占布局流 —— 非本周时渐显，本周时
+                  // 透明且不可点。出现/消失既不留空白也不跳动（旧方案是
+                  // 周条下方 Visibility(maintainSize) 常驻占位，本周时
+                  // 周条和网格之间留一块空白，已废弃）。悬浮在 Stack 顶层、
+                  // 不包在平移子级里，拖拽翻周时它原地不动。
+                  if (!isWide)
+                    Positioned(
+                      right: 4,
+                      bottom: 4,
+                      child: IgnorePointer(
+                        ignoring: isCurrentWeek,
+                        child: AnimatedOpacity(
+                          opacity: isCurrentWeek ? 0 : 1,
+                          duration: const Duration(milliseconds: 200),
+                          child: TextButton.icon(
+                            onPressed: isCurrentWeek
+                                ? null
+                                : () => _animateToWeek(_realWeek),
+                            style: TextButton.styleFrom(
+                              backgroundColor:
+                                  scheme.primary.withValues(alpha: 0.92),
+                              foregroundColor: scheme.onPrimary,
+                              elevation: 2,
+                              shadowColor: scheme.shadow,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              minimumSize: const Size(0, 32),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              textStyle: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            child: TimetableGrid(
-                              schedule: _scheduleOf(neighbor),
-                              weekMonday: _resolver.mondayOf(neighbor),
-                              todayWeekday: _todayWeekdayOf(neighbor),
-                              selectedKey: null,
-                              onSelectEntry: _selectEntry,
-                            ),
+                            icon: const Icon(Icons.today, size: 14),
+                            label: const Text('回到本周'),
                           ),
                         ),
-                    ],
-                  );
+                      ),
+                    ),
+                ],
+              );
             },
           ),
         ),
