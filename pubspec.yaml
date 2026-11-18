@@ -40,10 +40,9 @@ flutter_launcher_icons:
   android: true
   ios: true
   remove_alpha_ios: true
-  # Android自适应图标（安卓8.0+）
-  android_adaptive_icon: true
-  android_adaptive_icon_foreground: "assets/icons/app_icon.png"
-  android_adaptive_icon_background_color: "#ffffff"
+  # Android自适应图标（安卓8.0+）——键名不带 android_ 前缀
+  adaptive_icon_background: "#1c1917"
+  adaptive_icon_foreground: "assets/icons/app_icon.png"
   # Web图标
   web:
     generate: true
